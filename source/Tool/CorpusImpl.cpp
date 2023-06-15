@@ -33,6 +33,7 @@ mergeInfos(std::vector<std::unique_ptr<Info>>& Values)
         return llvm::createStringError(llvm::inconvertibleErrorCode(),
             "no info values to merge");
 
+#if 0
     switch (Values[0]->Kind) {
     case InfoKind::Namespace:
         return reduce<NamespaceInfo>(Values);
@@ -54,6 +55,29 @@ mergeInfos(std::vector<std::unique_ptr<Info>>& Values)
         return llvm::createStringError(llvm::inconvertibleErrorCode(),
             "unexpected info type");
     }
+#elif 0
+    return Values.front()->visit(
+        overloaded(
+            [&Values]<typename InfoTy>(
+                InfoTy& info)
+            {
+                print_debug("other info\n");
+                return reduce<InfoTy>(Values);
+            },
+            [&Values](
+                NamespaceInfo& info)
+            {
+                print_debug("namespace info\n");
+                return reduce<NamespaceInfo>(Values);
+            }));
+#elif 1
+    return Values.front()->visit(
+        [&Values]<typename InfoTy>(
+            InfoTy& info)
+        {
+            return reduce<InfoTy>(Values);
+        });
+#endif
 }
 
 //------------------------------------------------

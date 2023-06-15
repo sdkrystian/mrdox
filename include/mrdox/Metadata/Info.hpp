@@ -22,6 +22,9 @@
 #include <string_view>
 #include <vector>
 
+#include "Support/TypeTraits.hpp"
+#include <concepts>
+
 namespace clang {
 namespace mrdox {
 
@@ -31,7 +34,24 @@ struct FunctionInfo;
 struct EnumInfo;
 struct TypedefInfo;
 struct VariableInfo;
+struct FieldInfo;
 struct SpecializationInfo;
+
+template<
+    typename F,
+    typename InfoTy,
+    typename... Args>
+concept invocable_for_all_info =
+    (
+        std::invocable<F, add_cvref_from_t<InfoTy, NamespaceInfo>, Args...> &&
+        std::invocable<F, add_cvref_from_t<InfoTy, RecordInfo>, Args...> &&
+        std::invocable<F, add_cvref_from_t<InfoTy, FunctionInfo>, Args...> &&
+        std::invocable<F, add_cvref_from_t<InfoTy, EnumInfo>, Args...> &&
+        std::invocable<F, add_cvref_from_t<InfoTy, TypedefInfo>, Args...> &&
+        std::invocable<F, add_cvref_from_t<InfoTy, VariableInfo>, Args...> &&
+        std::invocable<F, add_cvref_from_t<InfoTy, FieldInfo>, Args...> &&
+        std::invocable<F, add_cvref_from_t<InfoTy, SpecializationInfo>, Args...>
+    ) || std::invocable<F, InfoTy, Args...>;
 
 /** Info variant discriminator
 */
@@ -122,6 +142,147 @@ struct MRDOX_VISIBLE
     constexpr bool isVariable()       const noexcept { return Kind == InfoKind::Variable; }
     constexpr bool isField()          const noexcept { return Kind == InfoKind::Field; }
     constexpr bool isSpecialization() const noexcept { return Kind == InfoKind::Specialization; }
+
+    template<
+        typename Visitor,
+        typename... Args>
+    decltype(auto)
+    visit(Visitor&& v, Args&&... args)
+    {
+        return Info::visit_impl(*this,
+            std::forward<Visitor>(v),
+            std::forward<Args>(args)...);
+    }
+
+    template<
+        typename Visitor,
+        typename... Args>
+    decltype(auto)
+    visit(Visitor&& v, Args&&... args) const
+    {
+        return Info::visit_impl(*this,
+            std::forward<Visitor>(v),
+            std::forward<Args>(args)...);
+    }
+
+private:
+    template<
+        typename InfoTy,
+        typename Visitor,
+        typename... Args>
+    static
+    void
+    visit_impl(
+        InfoTy& info,
+        Visitor&& v,
+        Args&&... args)
+    {
+        switch(info.Kind)
+        {
+        case InfoKind::Namespace:
+            return invoke_r_if_valid<void>(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, NamespaceInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Record:
+            return invoke_r_if_valid<void>(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, RecordInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Enum:
+            return invoke_r_if_valid<void>(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, EnumInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Function:
+            return invoke_r_if_valid<void>(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, FunctionInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Typedef:
+            return invoke_r_if_valid<void>(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, TypedefInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Variable:
+            return invoke_r_if_valid<void>(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, VariableInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Field:
+            return invoke_r_if_valid<void>(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, FieldInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Specialization:
+            return invoke_r_if_valid<void>(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, SpecializationInfo>>(info),
+                std::forward<Args>(args)...);
+        default:
+            break;
+        }
+    }
+
+    template<
+        typename InfoTy,
+        typename Visitor,
+        typename... Args>
+    requires invocable_for_all_info<
+        Visitor, InfoTy&, Args...>
+    static
+    decltype(auto)
+    visit_impl(
+        InfoTy& info,
+        Visitor&& v,
+        Args&&... args)
+    {
+        switch(info.Kind)
+        {
+        case InfoKind::Namespace:
+            return invoke_if_valid(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, NamespaceInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Record:
+            return invoke_if_valid(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, RecordInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Enum:
+            return invoke_if_valid(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, EnumInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Function:
+            return invoke_if_valid(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, FunctionInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Typedef:
+            return invoke_if_valid(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, TypedefInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Variable:
+            return invoke_if_valid(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, VariableInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Field:
+            return invoke_if_valid(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, FieldInfo>>(info),
+                std::forward<Args>(args)...);
+        case InfoKind::Specialization:
+            return invoke_if_valid(
+                std::forward<Visitor>(v),
+                static_cast<add_cvref_from_t<InfoTy&, SpecializationInfo>>(info),
+                std::forward<Args>(args)...);
+        default:
+            MRDOX_UNREACHABLE();
+        }
+    }
 };
 
 //------------------------------------------------
