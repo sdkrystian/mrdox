@@ -18,6 +18,119 @@
 #include <clang/AST/DeclCXX.h>
 #include <type_traits>
 
+#if 0
+    #include "Support/Debug.hpp"
+    #include "ASTVisitor.hpp"
+    #include <clang/AST/Decl.h>
+    #include <ranges>
+    #include <string>
+    #include <utility>
+    #include <vector>
+
+    namespace clang {
+    namespace mrdox {
+
+    #define TRACE_TRAVERSAL
+    #define TRACE_SKIP_UNTIL_EXPLICIT 1
+    #define TRACE_SHOW_IMPLICIT 1
+    #define TRACE_PRINT_FILE 1
+    #define TRACE_NO_PRINT 0
+
+    static
+    std::string
+    getDeclName(Decl* D)
+    {
+        if(auto* N = dyn_cast<NamedDecl>(D))
+            return N->getQualifiedNameAsString();
+        std::vector<std::string> enclosing = {"<unnamed>"};
+        for(auto* DC = D->getDeclContext();
+            DC && ! DC->isTranslationUnit(); DC = DC->getParent())
+        {
+            if(auto* N = dyn_cast<NamedDecl>(DC))
+                enclosing.insert(enclosing.end(), {"::", N->getNameAsString()});
+            else
+                enclosing.insert(enclosing.end(), {"::", "<unnamed>"});
+        }
+        auto v = std::views::join(std::views::reverse(enclosing));
+        return std::string(v.begin(), v.end());
+    }
+
+    static
+    auto
+    TracedTraversalState()
+    {
+        thread_local std::size_t depth = 0;
+        thread_local bool saw_explicit =
+            ! (TRACE_SKIP_UNTIL_EXPLICIT);
+        return std::pair<std::size_t&, bool&>(
+            depth, saw_explicit);
+    }
+
+    template<
+        typename Format,
+        typename... Args>
+    void print_debug_indented(
+        Format fmt,
+        std::size_t indent,
+        Args&&... args)
+    {
+        print_debug("{}{}", std::string(indent, ' '), fmt::vformat(
+            fmt, fmt::make_format_args(std::forward<Args>(args)...)));
+    }
+
+    static
+    void
+    TracedTraverseContext(
+        ASTVisitor& V,
+        DeclContext* DC,
+        bool increase_depth)
+    {
+        auto [depth, saw_explicit] = TracedTraversalState();
+        if(DC->isTranslationUnit())
+        {
+            depth = 0;
+            saw_explicit = ! (TRACE_SKIP_UNTIL_EXPLICIT);
+#if TRACE_PRINT_FILE
+            Decl* D = dyn_cast<Decl>(DC);
+            SourceManager& src_manager =
+                D->getASTContext().getSourceManager();
+            print_debug("{}\n",
+                src_manager.getNonBuiltinFilenameForID(
+                    src_manager.getMainFileID()).value().str());
+            ++depth;
+#endif
+        }
+        depth += increase_depth;
+        for(auto* C : DC->decls())
+        {
+#if TRACE_SHOW_IMPLICIT
+            if(saw_explicit |= ! C->isImplicit())
+#else
+            if(! C->isImplicit())
+#endif
+            {
+#if ! TRACE_NO_PRINT
+                std::string result = fmt::format(
+                    "{:<64}{:<64}",
+                    fmt::format(
+                        "{}{}{}",
+                        std::string(depth * 4, ' '),
+                        C->getDeclKindName(),
+                        C->isImplicit() ? " (implicit)" : ""),
+                    getDeclName(C));
+                print_debug("{}\n", result);
+#endif
+            }
+            V.TraverseDecl(C);
+        }
+        depth -= increase_depth;
+    }
+
+    } // mrdox
+    } // clang
+#endif
+
+
 namespace clang {
 namespace mrdox {
 

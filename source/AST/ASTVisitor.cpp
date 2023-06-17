@@ -1677,7 +1677,11 @@ TraverseDecl(
         // for declarations we don't explicitly handle, traverse the children
         // if it has any (e.g. LinkageSpecDecl, ExportDecl, ExternCContextDecl).
         if(auto* DC = dyn_cast<DeclContext>(D))
+#ifdef TRACE_TRAVERSAL
+            TracedTraverseContext(*this, DC, false);
+#else
             TraverseContext(DC);
+#endif
         break;
     }
 
@@ -1690,9 +1694,13 @@ TraverseContext(
     DeclContext* D)
 {
     MRDOX_ASSERT(D);
+#ifdef TRACE_TRAVERSAL
+    TracedTraverseContext(*this, D, true);
+#else
     for(auto* C : D->decls())
         if(! TraverseDecl(C))
             return false;
+#endif
     return true;
 }
 
@@ -1731,8 +1739,12 @@ HandleTranslationUnit(
     MRDOX_ASSERT(Context.getTraversalScope() ==
         std::vector<Decl*>{TU});
 
+#ifdef TRACE_TRAVERSAL
+    TracedTraverseContext(*this, dyn_cast<DeclContext>(TU), false);
+#else
     for(auto* C : TU->decls())
         TraverseDecl(C);
+#endif
 }
 
 void
