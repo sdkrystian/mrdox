@@ -10,7 +10,7 @@ For later versions of Visual Studio, no setup is required-->
 
   <Type Name="clang::Type">
     <Intrinsic Name="is_canonical" Expression="CanonicalType.Value.get_void_ptr() == this" />
-    
+
     <!-- To visualize clang::Types, we need to look at TypeBits.TC to determine the actual
          type subclass and manually dispatch accordingly (Visual Studio can't identify the real type
          because clang::Type has no virtual members hence no RTTI).
@@ -307,7 +307,7 @@ For later versions of Visual Studio, no setup is required-->
   </Type>
   <Type Name="clang::TemplateTypeParmType">
     <DisplayString IncludeView="cpp" Condition="! is_canonical()">{TTPDecl->Name,view(cpp)}</DisplayString>
-    <DisplayString Condition="! is_canonical()">Non-canonical: {*TTPDecl}</DisplayString>
+    <DisplayString Condition="! is_canonical()">Non-canonical: {TTPDecl}</DisplayString>
     <DisplayString>Canonical: {CanTTPTInfo}</DisplayString>
     <Expand>
       <ExpandedItem>*(clang::Type *)this, view(cmn)</ExpandedItem>
@@ -575,37 +575,43 @@ For later versions of Visual Studio, no setup is required-->
     </Expand>
   </Type>
   <Type Name="clang::IdentifierInfo">
-    <DisplayString Condition="Entry != 0">{((llvm::StringMapEntry&lt;clang::IdentifierInfo *&gt;*)Entry)+1,sb}</DisplayString>
+    <DisplayString Condition="Entry != nullptr">{Entry-&gt;key_data(),[Entry-&gt;key_size()]nas8}</DisplayString>
+    <DisplayString>&lt;null&gt;</DisplayString>
     <Expand>
-      <Item Condition="Entry != 0" Name="[Identifier]">((llvm::StringMapEntry&lt;clang::IdentifierInfo *&gt;*)Entry)+1,s</Item>
-      <Item Name="Token Kind">(clang::tok::TokenKind)TokenID</Item>
+      <!--<Item Condition="Entry != 0" Name="[Identifier]">((llvm::StringMapEntry&lt;clang::IdentifierInfo *&gt;*)Entry)+1,s</Item>-->
+      <Item Name="Kind">(clang::tok::TokenKind)TokenID,en</Item>
+      <Item Name="Name" Condition="Entry != nullptr">Entry-&gt;key_data(),[Entry-&gt;key_size()]nas8</Item>
     </Expand>
   </Type>
+  <!--
+  -->
   <Type Name="clang::DeclarationName">
+    <Intrinsic Category="Data" Name="get_ptr" Expression="(void*)(Ptr &amp; ~PtrMask)"/>
+    <Intrinsic Category="Data" Name="get_int" Expression="Ptr &amp; PtrMask"/>
     <DisplayString Condition="Ptr == 0" IncludeView="cpp"></DisplayString>
     <DisplayString Condition="Ptr == 0">Empty</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredIdentifier" IncludeView="cpp">{*(clang::IdentifierInfo *)(Ptr &amp; ~PtrMask)}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredIdentifier">{{Identifier ({*(clang::IdentifierInfo *)(Ptr &amp; ~PtrMask)})}}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredObjCZeroArgSelector">{{ObjC Zero Arg Selector (*{(clang::IdentifierInfo *)(Ptr &amp; ~PtrMask)})}}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredObjCOneArgSelector">{{ObjC One Arg Selector (*{(clang::IdentifierInfo *)(Ptr &amp; ~PtrMask)})}}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredCXXConstructorName" IncludeView="cpp">{(clang::detail::CXXSpecialNameExtra *)(Ptr &amp; ~PtrMask),view(cpp)na}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredCXXConstructorName">C++ Constructor {{{(clang::detail::CXXSpecialNameExtra *)(Ptr &amp; ~PtrMask),view(cpp)na}}}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredCXXDestructorName">C++ Destructor {{*(clang::detail::CXXSpecialNameExtra *)(Ptr &amp; ~PtrMask)}}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredCXXConversionFunctionName">C++ Conversion function {{*(clang::detail::CXXSpecialNameExtra *)(Ptr &amp; ~PtrMask)}}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredCXXOperatorName">C++ Operator {{*(clang::detail::CXXOperatorIdName *)(Ptr &amp; ~PtrMask)}}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredDeclarationNameExtra"
-                   IncludeView="cpp">{*(clang::detail::DeclarationNameExtra *)(Ptr &amp; ~PtrMask),view(cpp)}</DisplayString>
-    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredDeclarationNameExtra">{{Extra ({*(clang::detail::DeclarationNameExtra *)(Ptr &amp; ~PtrMask)})}}</DisplayString>
+    <DisplayString Condition="get_int() == StoredIdentifier" IncludeView="cpp">{*(clang::IdentifierInfo *)get_ptr()}</DisplayString>
+    <DisplayString Condition="get_int() == StoredIdentifier">{{Identifier ({*(clang::IdentifierInfo *)get_ptr()})}}</DisplayString>
+    <DisplayString Condition="get_int() == StoredObjCZeroArgSelector">{{ObjC Zero Arg Selector (*{(clang::IdentifierInfo *)get_ptr()})}}</DisplayString>
+    <DisplayString Condition="get_int() == StoredObjCOneArgSelector">{{ObjC One Arg Selector (*{(clang::IdentifierInfo *)get_ptr()})}}</DisplayString>
+    <DisplayString Condition="get_int() == StoredCXXConstructorName" IncludeView="cpp">{(clang::detail::CXXSpecialNameExtra *)get_ptr(),view(cpp)na}</DisplayString>
+    <DisplayString Condition="get_int() == StoredCXXConstructorName">C++ Constructor {{{(clang::detail::CXXSpecialNameExtra *)get_ptr(),view(cpp)na}}}</DisplayString>
+    <DisplayString Condition="get_int() == StoredCXXDestructorName">C++ Destructor {{*(clang::detail::CXXSpecialNameExtra *)get_ptr()}}</DisplayString>
+    <DisplayString Condition="get_int() == StoredCXXConversionFunctionName">C++ Conversion function {{*(clang::detail::CXXSpecialNameExtra *)get_ptr()}}</DisplayString>
+    <DisplayString Condition="get_int() == StoredCXXOperatorName">C++ Operator {{*(clang::detail::CXXOperatorIdName *)get_ptr()}}</DisplayString>
+    <DisplayString Condition="get_int() == StoredDeclarationNameExtra"
+                   IncludeView="cpp">{*(clang::detail::DeclarationNameExtra *)get_ptr(),view(cpp)}</DisplayString>
+    <DisplayString Condition="(Ptr &amp; PtrMask) == StoredDeclarationNameExtra">{{Extra ({*(clang::detail::DeclarationNameExtra *)get_ptr()})}}</DisplayString>
     <Expand>
       <Item Name="Kind">StoredNameKind(Ptr &amp; PtrMask),en</Item>
-      <Item Condition="(Ptr &amp; PtrMask) == StoredIdentifier" Name="[Identifier]">*(clang::IdentifierInfo *)(Ptr &amp; ~PtrMask),na</Item>
-      <Item Condition="(Ptr &amp; PtrMask) == StoredObjCZeroArgSelector" Name="[ObjC Zero Arg Selector]">*(clang::IdentifierInfo *)(Ptr &amp; ~PtrMask),na</Item>
-      <Item Condition="(Ptr &amp; PtrMask) == StoredObjCOneArgSelector" Name="[ObjC One Arg Selector]">*(clang::IdentifierInfo *)(Ptr &amp; ~PtrMask),na</Item>
-      <Item Condition="(Ptr &amp; PtrMask) == StoredCXXConstructorName" Name="[C++ Constructor]">*(clang::detail::CXXSpecialNameExtra *)(Ptr &amp; ~PtrMask),na</Item>
-      <Item Condition="(Ptr &amp; PtrMask) == StoredCXXDestructorName" Name="[C++ Destructor]">*(clang::detail::CXXSpecialNameExtra *)(Ptr &amp; ~PtrMask),na</Item>
-      <Item Condition="(Ptr &amp; PtrMask) == StoredCXXConversionFunctionName" Name="[C++ Conversion function]">*(clang::detail::CXXSpecialNameExtra *)(Ptr &amp; ~PtrMask),na</Item>
-      <Item Condition="(Ptr &amp; PtrMask) == StoredCXXOperatorName" Name="[C++ Operator]">*(clang::detail::CXXOperatorIdName *)(Ptr &amp; ~PtrMask),na</Item>
-      <Item Condition="(Ptr &amp; PtrMask) == StoredDeclarationNameExtra" Name="[Extra]">(clang::detail::DeclarationNameExtra *)(Ptr &amp; ~PtrMask),na</Item>
+      <Item Condition="get_int() == StoredIdentifier" Name="[Identifier]">*(clang::IdentifierInfo *)get_ptr(),na</Item>
+      <Item Condition="get_int() == StoredObjCZeroArgSelector" Name="[ObjC Zero Arg Selector]">*(clang::IdentifierInfo *)get_ptr(),na</Item>
+      <Item Condition="get_int() == StoredObjCOneArgSelector" Name="[ObjC One Arg Selector]">*(clang::IdentifierInfo *)get_ptr(),na</Item>
+      <Item Condition="get_int() == StoredCXXConstructorName" Name="[C++ Constructor]">*(clang::detail::CXXSpecialNameExtra *)get_ptr(),na</Item>
+      <Item Condition="get_int() == StoredCXXDestructorName" Name="[C++ Destructor]">*(clang::detail::CXXSpecialNameExtra *)get_ptr(),na</Item>
+      <Item Condition="get_int() == StoredCXXConversionFunctionName" Name="[C++ Conversion function]">*(clang::detail::CXXSpecialNameExtra *)get_ptr(),na</Item>
+      <Item Condition="get_int() == StoredCXXOperatorName" Name="[C++ Operator]">*(clang::detail::CXXOperatorIdName *)get_ptr(),na</Item>
+      <Item Condition="get_int() == StoredDeclarationNameExtra" Name="[Extra]">(clang::detail::DeclarationNameExtra *)get_ptr(),na</Item>
     </Expand>
   </Type>
   <Type Name="clang::detail::DeclarationNameExtra">
@@ -824,21 +830,21 @@ For later versions of Visual Studio, no setup is required-->
     <Intrinsic Category="Data" Name="get_value" Expression="*(uintptr_t*)(&amp;Link)" />
     <Intrinsic Category="Data" Name="get_int" Expression="get_value() &amp; 7" />
     <Intrinsic Category="Data" Name="get_void_ptr" Expression="(void*)(get_value() &amp; ~7ull)" />
-    <Intrinsic Category="Data" Name="get_ptr" Expression="($T1*)(get_int() != 5 ? get_void_ptr() : 
+    <Intrinsic Category="Data" Name="get_ptr" Expression="($T1*)(get_int() != 5 ? get_void_ptr() :
       ((KnownLatest::LazyData*)get_void_ptr())-&gt;LastValue)" />
     <Expand>
       <Item Name="[int]">get_int()</Item>
       <Item Name="[ptr]">get_ptr()</Item>
     </Expand>
   </Type>
-  
+
   <Type Name="clang::Redeclarable&lt;*&gt;">
     <Intrinsic Category="Data" Name="get_previous" Expression="(Redeclarable&lt;$T1&gt;*)(RedeclLink.get_ptr())" />
     <Intrinsic Category="Data" Name="get_first" Expression="(Redeclarable&lt;$T1&gt;*)First" />
     <Intrinsic Category="Data" Name="get_latest" Expression="get_first()-&gt;get_previous()" />
     <Intrinsic Category="Data" Name="is_first" Expression="get_first() == this" />
     <Expand>
-      
+
       <Synthetic Name="[redeclarations]">
         <DisplayString></DisplayString>
         <Expand>
@@ -853,13 +859,13 @@ For later versions of Visual Studio, no setup is required-->
   </Type>
 
   <!-- ================================================================================================ -->
-  
+
   <Type Name="clang::Decl">
     <Intrinsic Category="Data" Name="get_kind" Expression="(clang::Decl::Kind)DeclKind" />
 
     <DisplayString Condition="Implicit">{get_kind(),en}Decl (implicit)</DisplayString>
     <DisplayString>{get_kind(),en}Decl</DisplayString>
-    
+
     <Expand>
       <Item Name="Kind">get_kind(),en</Item>
       <Item Name="ID">(uintptr_t)this,x</Item>
@@ -872,7 +878,7 @@ For later versions of Visual Studio, no setup is required-->
       </Synthetic>
     </Expand>
   </Type>
-  
+
   <Type Name="clang::DeclContext">
     <!--<DisplayString>{(clang::Decl::Kind)DeclContextBits.DeclKind,en}Decl</DisplayString>-->
     <Expand>
@@ -890,7 +896,7 @@ For later versions of Visual Studio, no setup is required-->
   </Type>
 
   <!-- ================================================================================================ -->
-  
+
   <Type Name="clang::NamedDecl">
     <DisplayString>{Name}</DisplayString>
     <Expand>
@@ -924,7 +930,7 @@ For later versions of Visual Studio, no setup is required-->
     </Expand>
   </Type>
 
-  
+
 
   <!-- ================================================================================================ -->
 
@@ -939,26 +945,26 @@ For later versions of Visual Studio, no setup is required-->
       <!--<ExpandedItem>*(Decl*)this,nd</ExpandedItem>-->
       <ExpandedItem>*(DeclaratorDecl*)this,nd</ExpandedItem>
 
-      <Item Name="DescribedTemplate" Condition="! TemplateOrSpecialization.is_null() &amp;&amp; 
+      <Item Name="DescribedTemplate" Condition="! TemplateOrSpecialization.is_null() &amp;&amp;
         TemplateOrSpecialization.get_int() == 0 &amp;&amp;
           ((NamedDecl*)TemplateOrSpecialization.get_ptr())-&gt;get_kind() == Decl::FunctionTemplate">
         (FunctionTemplateDecl*)TemplateOrSpecialization.get_ptr()
       </Item>
-      <Item Name="InstantiatedFrom" Condition="! TemplateOrSpecialization.is_null() &amp;&amp; 
+      <Item Name="InstantiatedFrom" Condition="! TemplateOrSpecialization.is_null() &amp;&amp;
         TemplateOrSpecialization.get_int() == 0 &amp;&amp;
           ((NamedDecl*)TemplateOrSpecialization.get_ptr())-&gt;get_kind() == Decl::Function">
         (FunctionDecl*)TemplateOrSpecialization.get_ptr()
       </Item>
-      
+
       <Item Name="MemberSpecialization" Condition="! TemplateOrSpecialization.is_null() &amp;&amp; TemplateOrSpecialization.get_int() == 1">
         (MemberSpecializationInfo*)TemplateOrSpecialization.get_ptr()
       </Item>
-      
+
       <Item Name="TemplateSpecialization" Condition="! TemplateOrSpecialization.is_null() &amp;&amp; TemplateOrSpecialization.get_int() == 2">
         (FunctionTemplateSpecializationInfo*)TemplateOrSpecialization.get_ptr()
       </Item>
-      
-      
+
+
       <ExpandedItem>*(redeclarable_base*)this,nd</ExpandedItem>
       <ExpandedItem>*(DeclContext*)this,nd</ExpandedItem>
     </Expand>
@@ -972,7 +978,7 @@ For later versions of Visual Studio, no setup is required-->
       <ExpandedItem>*(DeclContext*)this,nd</ExpandedItem>
     </Expand>
   </Type>
-  
+
   <Type Name="clang::TemplateDecl">
     <Expand>
       <!--<ExpandedItem>*(Decl*)this,nd</ExpandedItem>-->
@@ -981,9 +987,9 @@ For later versions of Visual Studio, no setup is required-->
       <Item Name="TemplatedDecl">TemplatedDecl,na</Item>
     </Expand>
   </Type>
-  
+
   <!-- ================================================================================================ -->
-  
+
   <Type Name="clang::ClassTemplateDecl::Common">
     <Expand>
       <ExpandedItem>*(RedeclarableTemplateDecl::CommonBase*)this,nd</ExpandedItem>
@@ -994,20 +1000,20 @@ For later versions of Visual Studio, no setup is required-->
       <Item Name="InjectedClassNameType">InjectedClassNameType</Item>
       <Synthetic Name="[specializations]">
         <DisplayString Condition="Specializations.Vector.Size == 0">empty</DisplayString>
-        <DisplayString Condition="Specializations.Vector.Size != 0">{Specializations.Vector.Size} elements</DisplayString>
+        <DisplayString Condition="Specializations.Vector.Size != 0">{(size_t)Specializations.Vector.Size} elements</DisplayString>
         <Expand>
           <ArrayItems>
-            <Size>Specializations.Vector.Size</Size>
+            <Size>(size_t)Specializations.Vector.Size</Size>
             <ValuePointer>(ClassTemplateSpecializationDecl**)Specializations.Vector.BeginX</ValuePointer>
           </ArrayItems>
         </Expand>
       </Synthetic>
       <Synthetic Name="[partial specializations]">
         <DisplayString Condition="PartialSpecializations.Vector.Size == 0">empty</DisplayString>
-        <DisplayString Condition="PartialSpecializations.Vector.Size != 0">{PartialSpecializations.Vector.Size} elements</DisplayString>
+        <DisplayString Condition="PartialSpecializations.Vector.Size != 0">{(size_t)PartialSpecializations.Vector.Size} elements</DisplayString>
         <Expand>
           <ArrayItems>
-            <Size>PartialSpecializations.Vector.Size</Size>
+            <Size>(size_t)PartialSpecializations.Vector.Size</Size>
             <ValuePointer>(ClassTemplatePartialSpecializationDecl**)PartialSpecializations.Vector.BeginX</ValuePointer>
           </ArrayItems>
         </Expand>
@@ -1024,20 +1030,20 @@ For later versions of Visual Studio, no setup is required-->
       -->
       <Synthetic Name="[specializations]">
         <DisplayString Condition="Specializations.Vector.Size == 0">empty</DisplayString>
-        <DisplayString Condition="Specializations.Vector.Size != 0">{Specializations.Vector.Size} elements</DisplayString>
+        <DisplayString Condition="Specializations.Vector.Size != 0">{(size_t)Specializations.Vector.Size} elements</DisplayString>
         <Expand>
           <ArrayItems>
-            <Size>Specializations.Vector.Size</Size>
+            <Size>(size_t)Specializations.Vector.Size</Size>
             <ValuePointer>(VarTemplateSpecializationDecl**)Specializations.Vector.BeginX</ValuePointer>
           </ArrayItems>
         </Expand>
       </Synthetic>
       <Synthetic Name="[partial specializations]">
         <DisplayString Condition="PartialSpecializations.Vector.Size == 0">empty</DisplayString>
-        <DisplayString Condition="PartialSpecializations.Vector.Size != 0">{PartialSpecializations.Vector.Size} elements</DisplayString>
+        <DisplayString Condition="PartialSpecializations.Vector.Size != 0">{(size_t)PartialSpecializations.Vector.Size} elements</DisplayString>
         <Expand>
           <ArrayItems>
-            <Size>PartialSpecializations.Vector.Size</Size>
+            <Size>(size_t)PartialSpecializations.Vector.Size</Size>
             <ValuePointer>(VarTemplatePartialSpecializationDecl**)PartialSpecializations.Vector.BeginX</ValuePointer>
           </ArrayItems>
         </Expand>
@@ -1051,10 +1057,10 @@ For later versions of Visual Studio, no setup is required-->
       <!--<Item Name="Specializations">Specializations</Item>-->
       <Synthetic Name="[specializations]">
         <DisplayString Condition="Specializations.Vector.Size == 0">empty</DisplayString>
-        <DisplayString Condition="Specializations.Vector.Size != 0">{Specializations.Vector.Size} elements</DisplayString>
+        <DisplayString Condition="Specializations.Vector.Size != 0">{(size_t)Specializations.Vector.Size} elements</DisplayString>
         <Expand>
           <ArrayItems>
-            <Size>Specializations.Vector.Size</Size>
+            <Size>(size_t)Specializations.Vector.Size</Size>
             <ValuePointer>(FunctionTemplateSpecializationInfo**)Specializations.Vector.BeginX</ValuePointer>
           </ArrayItems>
         </Expand>
@@ -1085,7 +1091,7 @@ For later versions of Visual Studio, no setup is required-->
       <ExpandedItem>*(DeclaratorDecl*)this,nd</ExpandedItem>
     </Expand>
   </Type>
-  
+
   <!-- ================================================================================================ -->
 
   <Type Name="clang::FriendDecl">
@@ -1100,14 +1106,14 @@ For later versions of Visual Studio, no setup is required-->
           </ArrayItems>
         </Expand>
       </Synthetic>
-      
+
       <Item Name="FriendDecl" Condition="! Friend.is_null() &amp;&amp; Friend.get_int() == 0">(NamedDecl*)Friend.get_ptr()</Item>
       <Item Name="FriendType" Condition="! Friend.is_null() &amp;&amp; Friend.get_int() == 1">(TypeSourceInfo*)Friend.get_ptr()</Item>
       <Item Name="Unsupported">(bool)UnsupportedFriend</Item>
     </Expand>
   </Type>
 
-  <!-- FriendTemplateDecl is not currently used 
+  <!-- FriendTemplateDecl is not currently used
   <Type Name="clang::FriendTemplateDecl">
     <DisplayString>{(Decl*)this,nand}</DisplayString>
     <Expand>
@@ -1126,7 +1132,7 @@ For later versions of Visual Studio, no setup is required-->
     <Expand>
       <ExpandedItem>*(TemplateDecl*)this,nd</ExpandedItem>
 
-      <!-- 
+      <!--
       KRYSTIAN NOTE: this implements RedeclarableTemplateDecl::getCommonPtr without allocating/updating redeclarations.
       however, i think that using the CommonPtr stored in the first declaration should be good enough since it is propagated to
       all previous declarations upon access. as far as i know the only circumstance using the CommonPtr from the first
@@ -1162,7 +1168,7 @@ For later versions of Visual Studio, no setup is required-->
       <ExpandedItem>*(redeclarable_base*)this,nd</ExpandedItem>
     </Expand>
   </Type>
-  
+
   <!-- ================================================================================================ -->
 
   <Type Name="clang::FunctionTemplateDecl">
@@ -1193,7 +1199,7 @@ For later versions of Visual Studio, no setup is required-->
       <Item Name="Specialization">Specialization</Item>
     </Expand>
   </Type>
-  
+
   <!-- ================================================================================================ -->
 
   <Type Name="clang::MemberSpecializationInfo">
@@ -1239,7 +1245,7 @@ For later versions of Visual Studio, no setup is required-->
         ((MemberSpecializationInfo*)TemplateOrInstantiation.get_ptr())-&gt;MemberAndTSK.get_int() + 1),en
       </Item>
       -->
-      
+
       <!-- KRYSTIAN TODO: this is stored in a DenseMap in ASTContext...
       <Item Name="DescribedTemplate" Condition="! TemplateOrInstantiation.is_null() &amp;&amp; TemplateOrInstantiation.get_int() == 0">
         (VarTemplateDecl*)TemplateOrInstantiation.get_ptr()
@@ -1252,7 +1258,7 @@ For later versions of Visual Studio, no setup is required-->
       <Item Name="InstantiatedFromMember" Condition="is_vtpsd() &amp;&amp; ! as_vtpsd()-&gt;InstantiatedFromMember.is_null()">
         as_vtpsd()-&gt;InstantiatedFromMember.get_ptr()
       </Item>
-      
+
 
       <Item Name="SpecializedTemplate" Condition="is_vtsd() &amp;&amp; as_vtsd()-&gt;SpecializedTemplate.get_int() == 0">
         (VarTemplateDecl*)as_vtsd()-&gt;SpecializedTemplate.get_ptr()
@@ -1261,7 +1267,7 @@ For later versions of Visual Studio, no setup is required-->
         ((VarTemplateSpecializationDecl::SpecializedPartialSpecialization*)(as_vtsd()-&gt;SpecializedTemplate).get_ptr())-&gt;PartialSpecialization
       </Item>
       <Item Name="PointOfInstantiation" Condition="is_vtsd()">as_vtsd()-&gt;PointOfInstantiation</Item>
-      
+
       <ExpandedItem>*(redeclarable_base*)this,nd</ExpandedItem>
     </Expand>
   </Type>
@@ -1317,9 +1323,9 @@ For later versions of Visual Studio, no setup is required-->
   </Type>
 
   <!-- ================================================================================================ -->
-  
+
   <!--
-  
+
   <Type Name="clang::CXXMethodDecl">
     <DisplayString IncludeView="cpp">{*(clang::FunctionDecl *)this,nd}</DisplayString>
     <DisplayString>Method {{{*this,view(cpp)}}}</DisplayString>
@@ -1491,9 +1497,9 @@ For later versions of Visual Studio, no setup is required-->
   </Type>
   -->
 
-  
-  
-  
+
+
+
   <!--
   <Type Name="clang::DeclAccessPair">
     <DisplayString IncludeView="access" Condition="(Ptr&amp;Mask) == clang::AS_public">public</DisplayString>
@@ -1507,7 +1513,7 @@ For later versions of Visual Studio, no setup is required-->
       <Item Name="decl">*(clang::NamedDecl *)(Ptr&amp;~Mask)</Item>
     </Expand>
   </Type>
-  
+
   <Type Name="clang::DeclGroup">
     <DisplayString>NumDecls={NumDecls}</DisplayString>
     <Expand>
@@ -1526,5 +1532,5 @@ For later versions of Visual Studio, no setup is required-->
     </Expand>
   </Type>
   -->
-  
+
 </AutoVisualizer>
