@@ -1929,11 +1929,15 @@ public:
         I.ReturnType = buildTypeInfo(
             D->getReturnType());
 
-        if(auto* ftsi = D->getTemplateSpecializationInfo())
+        if(auto* FTSI = D->getTemplateSpecializationInfo())
         {
-            if(! I.Template)
-                I.Template = std::make_unique<TemplateInfo>();
-            parseTemplateArgs(*I.Template, ftsi);
+            // if this is an explicit specialization of a function template,
+            // parse the template arguments. a class scope explicit specialization
+            // should never take this path because the FunctionTemplateSpecializationInfo
+            // shouldn't exist until the enclosing class template is instantiated
+            MRDOX_ASSERT(! I.Template);
+            I.Template = std::make_unique<TemplateInfo>();
+            parseTemplateArgs(*I.Template, FTSI);
         }
 
         getParentNamespaces(I, D);
