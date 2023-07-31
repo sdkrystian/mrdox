@@ -41,6 +41,29 @@ struct llvm::yaml::MappingTraits<
 
 template<>
 struct llvm::yaml::MappingTraits<
+    clang::mrdox::ConfigImpl::SettingsImpl::FilterConfig::FilterList>
+{
+    static void mapping(IO &io,
+        clang::mrdox::ConfigImpl::SettingsImpl::FilterConfig::FilterList& f)
+    {
+        io.mapOptional("namespaces", f.namespaces);
+    }
+};
+
+template<>
+struct llvm::yaml::MappingTraits<
+    clang::mrdox::ConfigImpl::SettingsImpl::FilterConfig>
+{
+    static void mapping(IO &io,
+        clang::mrdox::ConfigImpl::SettingsImpl::FilterConfig& f)
+    {
+        io.mapOptional("allow", f.allow);
+        io.mapOptional("deny", f.deny);
+    }
+};
+
+template<>
+struct llvm::yaml::MappingTraits<
     clang::mrdox::ConfigImpl::SettingsImpl>
 {
     static void mapping(IO& io,
@@ -54,6 +77,8 @@ struct llvm::yaml::MappingTraits<
         io.mapOptional("source-root",       cfg.sourceRoot);
 
         io.mapOptional("input",             cfg.input);
+
+        io.mapOptional("filters",           cfg.filters);
     }
 };
 

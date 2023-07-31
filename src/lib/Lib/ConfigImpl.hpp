@@ -35,6 +35,17 @@ public:
             std::vector<std::string> include;
         };
 
+        struct FilterConfig
+        {
+            struct FilterList
+            {
+                std::vector<std::string> namespaces;
+            };
+
+            FilterList allow;
+            FilterList deny;
+        };
+
         /** Additional defines passed to the compiler.
         */
         std::vector<std::string> defines;
@@ -59,6 +70,8 @@ public:
         std::string sourceRoot;
 
         FileFilter input;
+
+        FilterConfig filters;
     };
 
     Settings const&

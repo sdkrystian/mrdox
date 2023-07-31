@@ -94,6 +94,73 @@ struct InfoPtrEqual
     }
 };
 
+//------------------------------------------------
+
+struct FilterNode
+{
+    std::string Name;
+    FilterNode* Parent;
+    std::vector<FilterNode> Children;
+
+    FilterNode(
+        std::string_view name = {},
+        FilterNode* parent = nullptr)
+        : Name(name)
+        , Parent(parent)
+    {
+    }
+
+    bool isRoot() const noexcept
+    {
+        return ! Parent;
+    }
+
+    bool isTerminal() const noexcept
+    {
+        return Children.empty();
+    }
+
+    FilterNode*
+    findChild(
+        std::string_view name)
+    {
+        for(auto& child : Children)
+            if(child.Name == name)
+                return &child;
+        return nullptr;
+    }
+};
+
+struct NamespaceFilter
+{
+    FilterNode root;
+    FilterNode* current = &root;
+    bool detached = false;
+
+    void
+    addFilter(
+        std::string_view str)
+    {
+        FilterNode* node = &root;
+        if(str.starts_with("::"))
+            str = str.substr(2);
+        do
+        {
+            std::size_t idx = str.find("::");
+            std::string_view name = str.substr(0, idx);
+
+            if(FilterNode* child = node->findChild(name))
+                node = child;
+            else
+                node = &node->Children.emplace_back(name, node);
+
+            if(idx == std::string_view::npos)
+                break;
+            str = str.substr(idx + 2);
+        }
+        while(! str.empty());
+    }
+};
 
 //------------------------------------------------
 //
@@ -147,6 +214,8 @@ public:
     // KRYSTIAN FIXME: this is terrible
     bool forceExtract_ = false;
 
+    NamespaceFilter nsFilter_;
+
     ASTVisitor(
         const ConfigImpl& config,
         Diagnostics& diags,
@@ -169,6 +238,10 @@ public:
         // (erroneously) used somewhere
         MRDOX_ASSERT(context_.getTraversalScope() ==
             std::vector<Decl*>{context_.getTranslationUnitDecl()});
+
+        for(std::string_view ns : config->filters.deny.namespaces)
+            nsFilter_.addFilter(ns);
+
     }
 
     auto& results()
@@ -2060,13 +2133,55 @@ traverse(NamespaceDecl* D)
         D->isAnonymousNamespace())
         return true;
 
+    FilterNode* prev_node = nsFilter_.current;
+    bool prev_detached = nsFilter_.detached;
+    if(! forceExtract_ && ! prev_detached)
+    {
+        std::string name = extractName(D);
+        // if the name of this namespace matches a child
+        // of the current filter node, then this namespace may
+        // be blacklisted or may contain a blacklisted namespace
+        if(FilterNode* child = prev_node->findChild(name))
+        {
+            // if the node is terminal (i.e. has no children),
+            // it means the namespace is blacklisted
+            if(child->isTerminal())
+                return true;
+            // otherwise, update the current node
+            nsFilter_.current = child;
+            nsFilter_.detached = false;
+        }
+        // if we are entering an inline namespace that does not
+        // match any child nodes, the deattached flag is not set
+        // because inline namespace members can be named as-if they
+        // are members of the innermost enclosing non-inline namespace
+        else if(! D->isInlineNamespace())
+        {
+            // if this namespace does not match a child
+            // of the current filter node, set the detached flag
+            // so we don't update the namespace filter state
+            // while traversing the children of this namespace
+            nsFilter_.detached = true;
+        }
+    }
+
     SymbolID id;
     if(! extractSymbolID(D, id))
         return true;
     auto [I, created] = getOrCreateInfo<NamespaceInfo>(id);
 
     buildNamespace(I, created, D);
-    return traverseContext(D);
+
+    traverseContext(D);
+
+    // restore the previous filter node
+    if(! forceExtract_)
+    {
+        nsFilter_.current = prev_node;
+        nsFilter_.detached = prev_detached;
+    }
+
+    return true;
 }
 
 bool
