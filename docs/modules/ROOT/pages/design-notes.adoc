@@ -48,3 +48,125 @@ for the scripting to work; exceptions are used to propagate errors from
 library code to scripts and back to the invoking code. For exceptional cases,
 these thrown exceptions should be uncaught. The tool installs an uncaught exception
 handler that prints a stack trace and exits the process immediately.
+
+== Extraction and Dependencies
+
+All `Info` is created via _extraction_, which is the process of converting a `clang::Decl` node into an `Info` object. Extraction can either be _explicit_ or _implicit_; `Info` resulting from implicit extraction is known as _implicit_ `Info` (sometimes called _dependent_ `Info`). Explicit extraction will occur for a namespace and class scope declaration that is:
+
+. declared in a file which passes the file filter, and
+. is a member of a namespace or class which passes the symbol filter
+
+Declarations which are not explicitly extracted may be subject to implicit extraction if they are used in a context which affects the interface of a declaration which was explicitly extracted.  This occurs for:
+
+. (direct or indirect) base classes of explicitly extracted declarations, e.g.
++
+[source,cpp]
+----
+// assume detail is blacklisted
+namespace detail
+{
+    struct A { };
+}
+
+// detail::A is implicitly extracted
+struct B : detail::A { };
+----
+
+. the return type of functions declared with a placeholder return type when the deduced type contains a local class, e.g.
++
+[source,cpp]
+----
+// A is implicitly extracted
+auto f()
+{
+    struct A { };
+    return A();
+}
+----
+
+. typedef names denoting such types, e.g.
++
+[source,cpp]
+----
+// assume detail is blacklisted
+namespace detail
+{
+    struct S0 { };
+    struct S1 { };
+    struct S2 { };
+
+    using A0 = S2;
+}
+
+// detail::S0 is NOT extracted because isn't used as a base class, nor is it a local class deduced as the return type of a function
+using A1 = detail::S0;
+
+using A2 = detail::S1;
+
+// detail::S1 is implicitly extracted
+struct S3 : A2 { };
+
+// detail::A0 and detail::S2 are implicitly extracted
+struct S4 : detail::A0 { };
+
+// LS and LA are implicitly extracted
+auto f()
+{
+    struct LS { };
+    using LA = LS;
+    return LA();
+}
+----
+
+The implicit extraction of a declaration `D` will also cause the implicit extraction of
+
+- every declaration containing `D`, and
+- if `D` is a class or a class template, every member of `D`
++
+NOTE: the implicit extraction of a namespace does not cause the implicit extraction of its members
+
+When a specialization `S` is used in a context requiring implicit extraction:
+
+- if `S` is dependent, the primary template `T` of `S` and all partial/explicit specializations of `T` are implicitly extracted
+- otherwise (i.e. `S` is not dependent):
+* if `S` was implicitly instantiated from a primary template `T`, `T` is implicitly extracted
+* if `S` was implicitly instantiated from partial specialization `P` of a template `T`, both `P` and `T` are implicitly extracted
+* if `S` is an explicit specialization of a template `T`, both `S` and `T` are implicitly extracted
+* if `S` is an explicit specialization of a member of a class template `T`, both `S` and `T` are implicitly extracted
+* if `S` is an explicit specialization of a member of a partial specialization `P` of a class template `T`, then `S`, `P`, and `T` are all implicitly extracted
+
+For example:
+[source,cpp]
+----
+// assume detail is blacklisted
+namespace detail {
+
+template<typename T>
+struct A { }; // #1
+
+template<typename T>
+struct A<T*> { }; // #2
+
+template<>
+struct A<int> { }; // #3
+
+struct B { }; // #4
+
+} // detail
+
+// #4 is implicitly extracted
+struct C0 : detail::B { };
+
+// #1 is implicitly extracted
+struct C1 : detail::A<void> { };
+
+// #1 and #2 are implicitly extracted
+struct C2 : detail::A<long*> { };
+
+// #1 and #3 are implicitly extracted
+struct C3 : detail::A<int> { };
+
+// #1, #2, and #3 are implicitly extracted
+template<typename T>
+struct C4 : detail::A<T> { };
+----
