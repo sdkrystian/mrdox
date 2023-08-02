@@ -17,6 +17,7 @@
 #include "lib/Support/Path.hpp"
 #include "lib/Support/Debug.hpp"
 #include "lib/Lib/Diagnostics.hpp"
+#include "lib/Lib/Info.hpp"
 #include <mrdox/Metadata.hpp>
 #include <clang/AST/AST.h>
 #include <clang/AST/Attr.h>
@@ -41,59 +42,6 @@ namespace clang {
 namespace mrdox {
 
 namespace {
-
-using InfoPtr = std::unique_ptr<Info>;
-
-struct InfoPtrHasher
-{
-    using is_transparent = void;
-
-    std::size_t operator()(
-        const InfoPtr& I) const
-    {
-        // the info set should never contain nullptrs
-        MRDOX_ASSERT(I);
-        return std::hash<SymbolID>()(I->id);
-    }
-
-    std::size_t operator()(
-        const SymbolID& id) const
-    {
-        return std::hash<SymbolID>()(id);
-    }
-};
-
-struct InfoPtrEqual
-{
-    using is_transparent = void;
-
-    bool operator()(
-        const InfoPtr& a,
-        const InfoPtr& b) const
-    {
-        MRDOX_ASSERT(a && b);
-        if(a == b)
-            return true;
-        return a->id == b->id;
-    }
-
-    bool operator()(
-        const InfoPtr& a,
-        const SymbolID& b) const
-    {
-        MRDOX_ASSERT(a);
-        return a->id == b;
-    }
-
-    bool operator()(
-        const SymbolID& a,
-        const InfoPtr& b) const
-    {
-        MRDOX_ASSERT(b);
-        return b->id == a;
-    }
-};
-
 
 //------------------------------------------------
 //
@@ -124,10 +72,7 @@ public:
     SourceManager& source_;
     Sema& sema_;
 
-    std::unordered_set<
-        InfoPtr,
-        InfoPtrHasher,
-        InfoPtrEqual> info_;
+    InfoSet info_;
 
     struct FileFilter
     {
@@ -171,7 +116,7 @@ public:
             std::vector<Decl*>{context_.getTranslationUnitDecl()});
     }
 
-    auto& results()
+    InfoSet& results()
     {
         return info_;
     }
@@ -2713,17 +2658,11 @@ class ASTVisitorConsumer
         visitor.traverseContext(
             Context.getTranslationUnitDecl());
 
-        // dumpDeclTree(Context.getTranslationUnitDecl());
-
-        // convert results to bitcode
-        for(auto& info : visitor.results())
-            insertBitcode(ex_, writeBitcode(*info));
-
         // VFALCO If we returned from the function early
         // then this line won't execute, which means we
         // will miss error and warnings emitted before
         // the return.
-        ex_.report(std::move(diags));
+        ex_.report(std::move(visitor.results()), std::move(diags));
     }
 
     /** Skip function bodies
@@ -2784,10 +2723,10 @@ class ASTVisitorConsumer
 public:
     ASTVisitorConsumer(
         const ConfigImpl& config,
-        tooling::ExecutionContext& ex,
+        ExecutionContext& ex,
         CompilerInstance& compiler) noexcept
         : config_(config)
-        , ex_(static_cast<ExecutionContext&>(ex))
+        , ex_(ex)
         , compiler_(compiler)
     {
     }
@@ -2803,7 +2742,7 @@ struct ASTAction
     : public clang::ASTFrontendAction
 {
     ASTAction(
-        tooling::ExecutionContext& ex,
+        ExecutionContext& ex,
         ConfigImpl const& config) noexcept
         : ex_(ex)
         , config_(config)
@@ -2836,7 +2775,7 @@ struct ASTAction
     }
 
 private:
-    tooling::ExecutionContext& ex_;
+    ExecutionContext& ex_;
     ConfigImpl const& config_;
 };
 
@@ -2846,7 +2785,7 @@ struct ASTActionFactory :
     tooling::FrontendActionFactory
 {
     ASTActionFactory(
-        tooling::ExecutionContext& ex,
+        ExecutionContext& ex,
         ConfigImpl const& config) noexcept
         : ex_(ex)
         , config_(config)
@@ -2860,7 +2799,7 @@ struct ASTActionFactory :
     }
 
 private:
-    tooling::ExecutionContext& ex_;
+    ExecutionContext& ex_;
     ConfigImpl const& config_;
 };
 
@@ -2870,7 +2809,7 @@ private:
 
 std::unique_ptr<tooling::FrontendActionFactory>
 makeFrontendActionFactory(
-    tooling::ExecutionContext& ex,
+    ExecutionContext& ex,
     ConfigImpl const& config)
 {
     return std::make_unique<ASTActionFactory>(ex, config);
