@@ -246,10 +246,10 @@ public:
         : corpus_(corpus)
     {
         llvm::SmallString<64> temp;
-        for(Info const* I : corpus_.index())
+        for(const Info& I : corpus_)
             map.try_emplace(
-                llvm::StringRef(I->id),
-                toBase16(I->id, true));
+                llvm::StringRef(I.id),
+                toBase16(I.id, true));
     }
 };
 

@@ -326,11 +326,13 @@ public:
 
     template<class U>
     requires std::convertible_to<U, T>
-    Expected(U&& u);
+    Expected(U&& u)
+        noexcept(std::is_nothrow_convertible_v<U, T>);
 
     template<class U>
     requires std::convertible_to<U, T>
-    Expected& operator=(Expected<U>&& other) noexcept;
+    Expected& operator=(Expected<U>&& other)
+        noexcept(std::is_nothrow_convertible_v<U, T>);
 
     // observers
 
@@ -521,11 +523,10 @@ template<class T>
 template<class U>
 requires std::convertible_to<U, T>
 Expected<T>::
-Expected(
-    U&& u)
+Expected(U&& u)
+    noexcept(std::is_nothrow_convertible_v<U, T>)
     : has_error_(false)
 {
-    static_assert(std::is_nothrow_convertible_v<U, T>);
     static_assert(! std::convertible_to<U, Error>);
 
     std::construct_at(&v_, std::forward<U>(u));
@@ -536,11 +537,10 @@ template<class U>
 requires std::convertible_to<U, T>
 auto
 Expected<T>::
-operator=(
-    Expected<U>&& other) noexcept ->
+operator=(Expected<U>&& other)
+    noexcept(std::is_nothrow_convertible_v<U, T>) ->
         Expected&
 {
-    static_assert(std::is_nothrow_convertible_v<U, T>);
     static_assert(! std::convertible_to<U, Error>);
 
     Expected temp(std::move(other));
