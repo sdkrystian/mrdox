@@ -101,7 +101,7 @@ build(
     // This operation happens ona thread pool.
     report::print(reportLevel, "Extracting declarations");
 
-    // #define USE_BITCODE
+    #define USE_BITCODE
 
     #ifdef USE_BITCODE
         BitcodeExecutionContext context(*config);

@@ -9,9 +9,8 @@
 // Official repository: https://github.com/cppalliance/mrdox
 //
 
-#include "BitcodeReader.hpp"
 #include "AnyBlock.hpp"
-#include "DecodeRecord.hpp"
+#include "BitcodeReader.hpp"
 #include "lib/Support/Debug.hpp"
 #include "lib/Support/Error.hpp"
 #include <mrdox/Support/Error.hpp>
@@ -50,8 +49,13 @@ getInfos()
                 return std::move(err);
             continue;
         }
-
-        // Top level blocks
+        case llvm::bitc::BLOCKINFO_BLOCK_ID:
+        {
+            if (auto err = readBlockInfoBlock())
+                return std::move(err);
+            continue;
+        }
+        // Top level Info blocks
         case BI_NAMESPACE_BLOCK_ID:
         {
             auto I = readInfo<NamespaceBlock>(ID);
@@ -119,18 +123,8 @@ getInfos()
             Infos.emplace_back(I.release());
                 continue;
         }
-
-        // Comment blocks should
-        // not appear at the top level
-        case BI_JAVADOC_BLOCK_ID:
-        case BI_JAVADOC_LIST_BLOCK_ID:
-        case BI_JAVADOC_NODE_BLOCK_ID:
-            return formatError("invalid top level block");
-        case llvm::bitc::BLOCKINFO_BLOCK_ID:
-            if (auto err = readBlockInfoBlock())
-                return std::move(err);
-            continue;
         default:
+            // return formatError("invalid top level block");
             if (llvm::Error err = Stream.SkipBlock())
             {
                 // FIXME this drops the error on the floor.
