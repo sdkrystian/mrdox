@@ -96,16 +96,160 @@ struct InfoPtrEqual
 
 //------------------------------------------------
 
+class IdentifierPattern
+{
+    std::vector<std::string_view> parts_;
+    std::size_t min_size_ = 0;
+
+    bool
+    matches_slow(
+        std::string_view str,
+        std::span<const std::string_view> parts) const;
+
+public:
+    IdentifierPattern(std::string_view pattern) noexcept;
+
+    bool operator==(
+        const IdentifierPattern&) const noexcept = default;
+
+    bool
+    matches(std::string_view str) const;
+
+    bool
+    subsumes(std::string_view pattern) const;
+
+    bool
+    subsumes(const IdentifierPattern& other) const;
+};
+
+IdentifierPattern::
+IdentifierPattern(
+    std::string_view pattern) noexcept
+{
+    if(pattern.empty())
+        return;
+    const auto last = pattern.end();
+    auto first = pattern.begin();
+    auto part_first = first;
+    bool wildcard = *first == '*';
+    do
+    {
+        if(++first != last &&
+            wildcard == (*first == '*'))
+            continue;
+        // empty string_view indicates a wildcard
+        min_size_ += parts_.emplace_back(part_first,
+            wildcard ? part_first : first).size();
+
+        wildcard = ! wildcard;
+        part_first = first;
+    }
+    while(first != last);
+}
+
+bool
+IdentifierPattern::
+matches_slow(
+    std::string_view str,
+    std::span<const std::string_view> parts) const
+{
+    MRDOX_ASSERT(! parts.empty());
+    const auto& part = parts.front();
+    parts = parts.subspan(1);
+    // current part is not a wild card
+    if(! part.empty())
+    {
+        // every character in the pattern must
+        // match the beginning of the string
+        if(! str.starts_with(part))
+            return false;
+        str.remove_prefix(part.size());
+        // if there are no other parts, then we only
+        // have a match if there are no characters left
+        if(parts.empty())
+            return str.empty();
+        // if we had a match and the pattern ends in
+        // a wildcard, the entire string matches
+        if(parts.size() == 1)
+            return true;
+        return matches_slow(str, parts);
+    }
+    // current part is a wildcard.
+    // check all possible lengths for this wildcard until we
+    // either find a match, or we run out of characters.
+    for(; ! str.empty(); str.remove_prefix(1))
+    {
+        if(matches_slow(str, parts))
+            return true;
+    }
+    return false;
+}
+
+bool
+IdentifierPattern::
+matches(std::string_view str) const
+{
+    if(parts_.size() == 1)
+    {
+        const auto& first = parts_.front();
+        // pattern is just '*', match everything
+        if(first.empty())
+            return true;
+        // pattern has no wildcards
+        return str == first;
+    }
+    // no match when the string is shorter than
+    // the shortest possible match size
+    if(str.size() < min_size_)
+        return false;
+    // otherwise, use the wildcard matching algorithm
+    return matches_slow(str, parts_);
+}
+
+bool
+IdentifierPattern::
+subsumes(std::string_view pattern) const
+{
+    // KRYSTIAN FIXME: we really shouldn't need to use
+    // std::string here; would be better to just make
+    // matches work with ranges.
+    auto without_wildcards = std::views::filter(
+        pattern, [](char c) { return c != '*'; });
+    return matches(std::string(
+        without_wildcards.begin(),
+        without_wildcards.end()));
+}
+
+
+bool
+IdentifierPattern::
+subsumes(const IdentifierPattern& other) const
+{
+    // KRYSTIAN FIXME: we really shouldn't need to use
+    // std::string here; would be better to just make
+    // matches work with ranges.
+    auto without_wildcards =
+        std::views::join(other.parts_);
+    return matches(std::string(
+        without_wildcards.begin(),
+        without_wildcards.end()));
+}
+
 struct FilterNode
 {
-    std::string Name;
+    IdentifierPattern Pattern;
     FilterNode* Parent;
     std::vector<FilterNode> Children;
 
+    FilterNode()
+        : Pattern("*")
+    {
+    }
+
     FilterNode(
-        std::string_view name = {},
+        const IdentifierPattern& pattern,
         FilterNode* parent = nullptr)
-        : Name(name)
+        : Pattern(pattern)
         , Parent(parent)
     {
     }
@@ -120,14 +264,51 @@ struct FilterNode
         return Children.empty();
     }
 
+    void
+    merge(FilterNode& other)
+    {
+        if(! Pattern.subsumes(other.Pattern) &&
+            ! other.Pattern.subsumes(Pattern))
+            return;
+        for(auto& other_child : other.Children)
+        {
+            bool found_exact = false;
+            for(auto& child : Children)
+            {
+                if(child.Pattern.subsumes(other_child.Pattern))
+                    other_child.merge(child);
+                if(other_child.Pattern.subsumes(child.Pattern))
+                    child.merge(other_child);
+                found_exact |= child.Pattern == other_child.Pattern;
+            }
+            if(! found_exact)
+                Children.push_back(other_child);
+        }
+    }
+
     FilterNode*
     findChild(
         std::string_view name)
     {
         for(auto& child : Children)
-            if(child.Name == name)
+            if(child.Pattern.matches(name))
                 return &child;
         return nullptr;
+    }
+
+    FilterNode*
+    findChild(
+        std::string_view name)
+    {
+        FilterNode* best = nullptr;
+        for(auto& child : Children)
+        {
+            if(! child.Pattern.matches(name))
+                continue;
+            if(! best || child.Pattern.subsumes(best->Pattern))
+                best = &child;
+        }
+        return best;
     }
 };
 
@@ -141,24 +322,24 @@ struct NamespaceFilter
     addFilter(
         std::string_view str)
     {
-        FilterNode* node = &root;
+        FilterNode head;
+        FilterNode* node = &head;
         if(str.starts_with("::"))
-            str = str.substr(2);
+            str.remove_prefix(2);
         do
         {
             std::size_t idx = str.find("::");
-            std::string_view name = str.substr(0, idx);
 
-            if(FilterNode* child = node->findChild(name))
-                node = child;
-            else
-                node = &node->Children.emplace_back(name, node);
+            node = &node->Children.emplace_back(
+                str.substr(0, idx), node);
 
             if(idx == std::string_view::npos)
                 break;
-            str = str.substr(idx + 2);
+            str.remove_prefix(idx + 2);
         }
         while(! str.empty());
+
+        root.merge(head);
     }
 };
 
