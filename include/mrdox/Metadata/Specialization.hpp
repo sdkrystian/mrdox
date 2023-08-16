@@ -26,16 +26,16 @@ namespace mrdox {
 struct SpecializedMember
 {
     /** ID of the member in the primary template */
-    SymbolID Primary;
+    const Info* Primary;
 
     /** ID of the member specialization */
-    SymbolID Specialized;
+    const Info* Specialized;
 
     SpecializedMember() = default;
 
     SpecializedMember(
-        SymbolID primary,
-        SymbolID specialized)
+        const Info* primary,
+        const Info* specialized)
         : Primary(primary)
         , Specialized(specialized)
     {
@@ -53,7 +53,7 @@ struct SpecializationInfo
     std::vector<std::unique_ptr<TArg>> Args;
 
     /** ID of the template to which the arguments pertain */
-    SymbolID Primary = SymbolID::zero;
+    const Info* Primary = nullptr;
 
     /** The specialized members.
 

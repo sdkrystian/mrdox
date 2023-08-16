@@ -595,6 +595,21 @@ emitRecord(
     Stream.EmitRecordWithAbbrev(Abbrevs.get(ID), Record);
 }
 
+void
+BitcodeWriter::
+emitRecord(
+    const std::vector<const Info*>& Values, RecordID ID)
+{
+    MRDOX_ASSERT(RecordIDNameMap[ID]);
+    MRDOX_ASSERT(RecordIDNameMap[ID].Abbrev == &SymbolIDsAbbrev);
+    if(! prepRecordData(ID, Values.begin() != Values.end()))
+        return;
+    Record.push_back(Values.size());
+    for(const Info* info : Values)
+        Record.append(info->id.begin(), info->id.end());
+    Stream.EmitRecordWithAbbrev(Abbrevs.get(ID), Record);
+}
+
 // SymbolIDs
 void
 BitcodeWriter::
@@ -638,7 +653,7 @@ emitRecord(
 void
 BitcodeWriter::
 emitRecord(
-    SymbolID const& Sym,
+    const SymbolID& Sym,
     RecordID ID)
 {
     MRDOX_ASSERT(RecordIDNameMap[ID] && "Unknown RecordID.");
@@ -650,6 +665,17 @@ emitRecord(
     Record.push_back(Sym.size());
     Record.append(Sym.begin(), Sym.end());
     Stream.EmitRecordWithAbbrev(Abbrevs.get(ID), Record);
+}
+
+void
+BitcodeWriter::
+emitRecord(
+    const Info* info,
+    RecordID ID)
+{
+    if(! info)
+        return;
+    return emitRecord(info->id, ID);
 }
 
 void
@@ -1024,7 +1050,7 @@ emitBlock(
     emitRecord(I.Primary, SPECIALIZATION_PRIMARY);
     for(const auto& targ : I.Args)
         emitBlock(targ);
-    std::vector<SymbolID> members;
+    std::vector<const Info*> members;
     members.reserve(I.Members.size() * 2);
     for(const auto& mem : I.Members)
     {
@@ -1041,7 +1067,7 @@ emitBlock(
 {
     StreamSubBlockGuard Block(Stream, BI_TEMPLATE_BLOCK_ID);
     if(T.Primary)
-        emitRecord(*T.Primary, TEMPLATE_PRIMARY_USR);
+        emitRecord(T.Primary, TEMPLATE_PRIMARY_USR);
     for(const auto& targ : T.Args)
         emitBlock(targ);
     for(const auto& tparam : T.Params)

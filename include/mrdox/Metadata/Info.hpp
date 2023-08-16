@@ -95,7 +95,7 @@ struct MRDOX_VISIBLE
 
     /** In-order List of parent namespaces.
     */
-    std::vector<SymbolID> Namespace;
+    std::vector<const Info*> Namespace;
 
     /** The extracted javadoc for this declaration.
     */

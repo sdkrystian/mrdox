@@ -40,13 +40,13 @@ domCreate(
 
 class DomSymbolArray : public dom::ArrayImpl
 {
-    std::vector<SymbolID> const& list_;
+    std::vector<const Info*> const& list_;
     DomCorpus const& domCorpus_;
     //SharedPtr<> ref_; // keep owner of list_ alive
 
 public:
     DomSymbolArray(
-        std::vector<SymbolID> const& list,
+        std::vector<const Info*> const& list,
         DomCorpus const& domCorpus) noexcept
         : list_(list)
         , domCorpus_(domCorpus)
@@ -292,11 +292,8 @@ domCreate(
             {
                 entries.emplace_back("name",
                     t.Name);
-                // KRYSTIAN NOTE: hack for missing SymbolIDs
-                if(t.Template != SymbolID::zero &&
-                    domCorpus.corpus.find(t.Template))
-                    entries.emplace_back("template",
-                        toBase16(t.Template));
+                entries.emplace_back("template",
+                    domCorpus.get(t.Template));
             }
         });
     return dom::Object(std::move(entries));
@@ -351,7 +348,7 @@ domCreate(
         return nullptr;
     return dom::Object({
         { "kind", toString(I->specializationKind()) },
-        { "primary", domCorpus.getOptional(*I->Primary) },
+        { "primary", domCorpus.get(I->Primary) },
         { "params", dom::newArray<DomTParamArray>( I->Params, domCorpus) },
         { "args", dom::newArray<DomTArgArray>(I->Args, domCorpus) }
         });
@@ -377,11 +374,8 @@ domCreate(
             entries.emplace_back("name", t.Name);
 
         if constexpr(requires { t.id; })
-        {
-            // VFALCO hack for missing symbols?
-            if(t.id != SymbolID::zero && domCorpus.corpus.find(t.id))
-                entries.emplace_back("id", toBase16(t.id));
-        }
+            entries.emplace_back("id",
+                domCorpus.get(t.id));
 
         if constexpr(T::isSpecialization())
             entries.emplace_back("args",
@@ -887,6 +881,15 @@ getOptional(SymbolID const& id) const
     if(id == SymbolID::zero)
         return nullptr;
     return impl_->get(id);
+}
+
+dom::Value
+DomCorpus::
+get(const Info* info) const
+{
+    if(! info)
+        return nullptr;
+    return impl_->get(info->id);
 }
 
 dom::Value

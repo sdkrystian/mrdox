@@ -140,6 +140,168 @@ getInfos()
 
 Error
 BitcodeReader::
+readInfos()
+{
+    MRDOX_ASSERT(unresolved_);
+
+    if (auto err = validateStream())
+        return err;
+
+    // Read the top level blocks.
+    while (!Stream.AtEndOfStream())
+    {
+        llvm::Expected<unsigned> MaybeCode = Stream.ReadCode();
+        if(! MaybeCode)
+            return toError(MaybeCode.takeError());
+        if(MaybeCode.get() != llvm::bitc::ENTER_SUBBLOCK)
+            return formatError("no blocks in input");
+        llvm::Expected<unsigned> MaybeID = Stream.ReadSubBlockID();
+        if(! MaybeID)
+            return toError(MaybeID.takeError());
+        switch(unsigned ID = MaybeID.get())
+        {
+        // Top level Version is first
+        case BI_VERSION_BLOCK_ID:
+        {
+            VersionBlock B;
+            if (auto err = readBlock(B, ID))
+                return std::move(err);
+            continue;
+        }
+        case llvm::bitc::BLOCKINFO_BLOCK_ID:
+        {
+            if (auto err = readBlockInfoBlock())
+                return std::move(err);
+            continue;
+        }
+        // Top level Info blocks
+        case BI_NAMESPACE_BLOCK_ID:
+        {
+            auto I = readInfo<NamespaceBlock>(ID);
+            if(! I)
+                return I.error();
+            unresolved_->emplace(I.release());
+            continue;
+        }
+        case BI_RECORD_BLOCK_ID:
+        {
+            auto I = readInfo<RecordBlock>(ID);
+            if(! I)
+                return I.error();
+            unresolved_->emplace(I.release());
+            continue;
+        }
+        case BI_FUNCTION_BLOCK_ID:
+        {
+            auto I = readInfo<FunctionBlock>(ID);
+            if(! I)
+                return I.error();
+            unresolved_->emplace(I.release());
+            continue;
+        }
+        case BI_TYPEDEF_BLOCK_ID:
+        {
+            auto I = readInfo<TypedefBlock>(ID);
+            if(! I)
+                return I.error();
+            unresolved_->emplace(I.release());
+            continue;
+        }
+        case BI_ENUM_BLOCK_ID:
+        {
+            auto I = readInfo<EnumBlock>(ID);
+            if(! I)
+                return I.error();
+            unresolved_->emplace(I.release());
+            continue;
+        }
+        case BI_VARIABLE_BLOCK_ID:
+        {
+            auto I = readInfo<VarBlock>(ID);
+            if(! I)
+                return I.error();
+            unresolved_->emplace(I.release());
+            continue;
+        }
+        // although fields can only be members of records,
+        // they are emitted as top-level blocks anyway
+        case BI_FIELD_BLOCK_ID:
+        {
+            auto I = readInfo<FieldBlock>(ID);
+            if(! I)
+                return I.error();
+            unresolved_->emplace(I.release());
+            continue;
+        }
+
+        case BI_SPECIALIZATION_BLOCK_ID:
+        {
+            auto I = readInfo<SpecializationBlock>(ID);
+            if(! I)
+                return I.error();
+            unresolved_->emplace(I.release());
+            continue;
+        }
+        default:
+            // return formatError("invalid top level block");
+            if (llvm::Error err = Stream.SkipBlock())
+            {
+                // FIXME this drops the error on the floor.
+                consumeError(std::move(err));
+            }
+            continue;
+        }
+    }
+    return Error::success();
+}
+
+//------------------------------------------------
+
+Error
+BitcodeReader::
+decodeSymbolID(
+    Record const& R,
+    const Info*& Field,
+    llvm::StringRef Blob)
+{
+    if (R[0] != BitCodeConstants::USRHashSize)
+        return formatError("USR digest size={}", R[0]);
+    // UnresolvedInfoSet is required to resolve Info references
+    if(! unresolved_)
+        return Error::success();
+
+    SymbolID id(&R[1]);
+    unresolved_->find(id, Field);
+
+    return Error::success();
+}
+
+Error
+BitcodeReader::
+decodeSymbolIDs(
+    Record const& R,
+    std::vector<const Info*>& Field,
+    llvm::StringRef Blob)
+{
+    auto src = R.begin();
+    auto n = *src++;
+    Field.resize(n);
+    auto* dest = &Field[0];
+    while(n--)
+    {
+        SymbolID id(src);
+        // UnresolvedInfoSet is required to resolve Info references
+        if(unresolved_)
+            unresolved_->find(id, *dest++);
+        src += BitCodeConstants::USRHashSize;
+    }
+    return Error::success();
+}
+
+//------------------------------------------------
+
+Error
+BitcodeReader::
 validateStream()
 {
     if (Stream.AtEndOfStream())
@@ -308,6 +470,16 @@ readBitcode(llvm::StringRef bitcode)
     llvm::BitstreamCursor Stream(bitcode);
     BitcodeReader reader(Stream);
     return reader.getInfos();
+}
+
+Error
+readBitcode(
+    llvm::StringRef bitcode,
+    UnresolvedInfoSet& unresolved)
+{
+    llvm::BitstreamCursor Stream(bitcode);
+    BitcodeReader reader(Stream, &unresolved);
+    return reader.readInfos();
 }
 
 } // mrdox

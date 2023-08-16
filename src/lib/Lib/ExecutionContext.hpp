@@ -48,7 +48,7 @@ public:
     virtual
     void
     report(
-        InfoSet&& info,
+        UnresolvedInfoSet&& results,
         Diagnostics&& diags) = 0;
 
     virtual
@@ -67,14 +67,14 @@ class InfoExecutionContext
 {
     std::shared_mutex mutex_;
     Diagnostics diags_;
-    InfoSet info_;
+    UnresolvedInfoSet results_;
 
 public:
     using ExecutionContext::ExecutionContext;
 
     void
     report(
-        InfoSet&& info,
+        UnresolvedInfoSet&& results,
         Diagnostics&& diags) override;
 
     void
@@ -100,7 +100,7 @@ public:
 
     void
     report(
-        InfoSet&& info,
+        UnresolvedInfoSet&& results,
         Diagnostics&& diags) override;
 
     void

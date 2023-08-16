@@ -99,15 +99,15 @@ struct RecordInfo
 
     /** List of friend functions.
     */
-    std::vector<SymbolID> Friends;
+    std::vector<const Info*> Friends;
 
     /** Record members
     */
-    std::vector<SymbolID> Members;
+    std::vector<const Info*> Members;
 
     /** Record member specializations
     */
-    std::vector<SymbolID> Specializations;
+    std::vector<const Info*> Specializations;
 
     //--------------------------------------------
 

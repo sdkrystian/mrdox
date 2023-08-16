@@ -20,6 +20,7 @@
 //
 
 #include "BitcodeIDs.hpp"
+#include "lib/Lib/Info.hpp"
 #include <mrdox/Metadata.hpp>
 #include <mrdox/Support/Error.hpp>
 #include <llvm/ADT/SmallVector.h>
@@ -36,8 +37,10 @@ class BitcodeReader
 {
 public:
     BitcodeReader(
-        llvm::BitstreamCursor& Stream)
-        : Stream(Stream)
+        llvm::BitstreamCursor& stream,
+        UnresolvedInfoSet* unresolved = nullptr)
+        : Stream(stream)
+        , unresolved_(unresolved)
     {
     }
 
@@ -45,6 +48,19 @@ public:
     auto
     getInfos() ->
         mrdox::Expected<std::vector<std::unique_ptr<Info>>>;
+
+    Error
+    decodeSymbolID(
+        Record const& R,
+        const Info*& Field,
+        llvm::StringRef Blob);
+
+    Error
+    decodeSymbolIDs(
+        Record const& R,
+        std::vector<const Info*>& Field,
+        llvm::StringRef Blob);
+
 public:
     struct AnyBlock;
 
@@ -64,6 +80,9 @@ public:
     template<class T>
     mrdox::Expected<std::unique_ptr<Info>>
     readInfo(unsigned ID);
+
+    Error
+    readInfos();
 
     /** Read a single block.
 
@@ -85,6 +104,7 @@ public:
     llvm::BitstreamCursor& Stream;
     std::optional<llvm::BitstreamBlockInfo> BlockInfo;
     std::vector<AnyBlock*> blockStack_;
+    UnresolvedInfoSet* unresolved_;
 };
 
 } // mrdox

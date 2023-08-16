@@ -57,10 +57,9 @@ makeNamespaceOverloads(
     Corpus const& corpus)
 {
     std::vector<FunctionInfo const*> data;
-    for(auto const& id : I.Members)
+    for(const Info* info : I.Members)
     {
-        if(const Info* info = corpus.find(id);
-            info && info->isFunction())
+        if(info && info->isFunction())
         {
             data.push_back(static_cast<
                 const FunctionInfo*>(info));

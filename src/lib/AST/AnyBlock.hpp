@@ -491,7 +491,7 @@ public:
         case INFO_PART_NAME:
             return decodeRecord(R, I.Name, Blob);
         case INFO_PART_PARENTS:
-            return decodeRecord(R, I.Namespace, Blob);
+            return br_.decodeSymbolIDs(R, I.Namespace, Blob);
         default:
             return AnyBlock::parseRecord(R, ID, Blob);
         }
@@ -688,7 +688,7 @@ public:
             return visit(*I_, [&]<typename T>(T& t)
                 {
                     if constexpr(requires { t.id; })
-                        return decodeRecord(R, t.id, Blob);
+                        return br_.decodeSymbolID(R, t.id, Blob);
                     else
                         return Error("wrong TypeInfo kind");
                 });
@@ -885,7 +885,7 @@ public:
         {
             if(! I_->isTemplate())
                 return formatError("only TemplateTArgs may reference a template");
-            return decodeRecord(R,
+            return br_.decodeSymbolID(R,
                 static_cast<TemplateTArg&>(
                     *I_.get()).Template, Blob);
         }
@@ -1054,7 +1054,7 @@ public:
         switch(ID)
         {
         case TEMPLATE_PRIMARY_USR:
-            return decodeRecord(R, I_.Primary.emplace(), Blob);
+            return br_.decodeSymbolID(R, I_.Primary, Blob);
         default:
             return AnyBlock::parseRecord(R, ID, Blob);
         }
@@ -1257,9 +1257,9 @@ public:
         switch(ID)
         {
         case NAMESPACE_MEMBERS:
-            return decodeRecord(R, I->Members, Blob);
+            return br_.decodeSymbolIDs(R, I->Members, Blob);
         case NAMESPACE_SPECIALIZATIONS:
-            return decodeRecord(R, I->Specializations, Blob);
+            return br_.decodeSymbolIDs(R, I->Specializations, Blob);
         case NAMESPACE_BITS:
             return decodeRecord(R, {&I->specs.raw}, Blob);
         default:
@@ -1296,11 +1296,11 @@ public:
         case RECORD_BITS:
             return decodeRecord(R, {&I->specs.raw}, Blob);
         case RECORD_FRIENDS:
-            return decodeRecord(R, I->Friends, Blob);
+            return br_.decodeSymbolIDs(R, I->Friends, Blob);
         case RECORD_MEMBERS:
-            return decodeRecord(R, I->Members, Blob);
+            return br_.decodeSymbolIDs(R, I->Members, Blob);
         case RECORD_SPECIALIZATIONS:
-            return decodeRecord(R, I->Specializations, Blob);
+            return br_.decodeSymbolIDs(R, I->Specializations, Blob);
         default:
             return TopLevelBlock::parseRecord(R, ID, Blob);
         }
@@ -1612,11 +1612,12 @@ public:
         switch(ID)
         {
         case SPECIALIZATION_PRIMARY:
-            return decodeRecord(R, I->Primary, Blob);
+            return br_.decodeSymbolID(R, I->Primary, Blob);
         case SPECIALIZATION_MEMBERS:
         {
-            std::vector<SymbolID> members;
-            if(auto err = decodeRecord(R, members, Blob))
+
+            std::vector<const Info*> members;
+            if(auto err = br_.decodeSymbolIDs(R, members, Blob))
                 return err;
             for(std::size_t i = 0; i < members.size(); i += 2)
                 I->Members.emplace_back(members[i + 0], members[i + 1]);

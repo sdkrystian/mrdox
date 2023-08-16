@@ -340,8 +340,8 @@ writeRecord(
     }
 
     // Friends
-    for(auto const& id : I.Friends)
-        tags_.write(friendTagName, "", { { id } });
+    for(const Info* F : I.Friends)
+        tags_.write(friendTagName, "", { { F->id } });
 
     writeJavadoc(I.javadoc);
 
@@ -482,7 +482,7 @@ openTemplate(
         return;
 
     const SymbolID& id = I->Primary ?
-        *I->Primary : SymbolID::zero;
+        I->Primary->id : SymbolID::zero;
 
     tags_.open(templateTagName, {
         {"class", toString(I->specializationKind()),
@@ -513,7 +513,7 @@ writeSpecialization(
 {
     tags_.open(specializationTagName, {
         {I.id},
-        {"primary", toString(I.Primary) }
+        {"primary", I.Primary ? I.Primary->id : SymbolID::zero }
     });
 
     for(const auto& targ : I.Args)

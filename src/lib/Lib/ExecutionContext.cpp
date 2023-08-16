@@ -45,6 +45,14 @@ void merge(Info& I, Info&& Other)
         });
 }
 
+void resolve(Info& I, UnresolvedInfoSet& Info)
+{
+    visit(I, [&](auto& II) mutable
+        {
+            resolve(II, Info);
+        });
+}
+
 } // (anon)
 
 // ----------------------------------------------------------------
@@ -54,27 +62,35 @@ void merge(Info& I, Info&& Other)
 void
 InfoExecutionContext::
 report(
-    InfoSet&& results,
+    UnresolvedInfoSet&& results,
     Diagnostics&& diags)
 {
-    InfoSet info = std::move(results);
-    // KRYSTIAN TODO: read stage will be required to
-    // update Info references once we switch to using Info*
+    InfoSet& infos = results_.get();
     #if 0
     {
         std::shared_lock read_lock(mutex_);
+
+        // resolve any references to Info which
+        // exists in the primary result set
+        results.resolve(results_);
+
     }
     #endif
 
+
     std::unique_lock write_lock(mutex_);
+
+    results.resolve(results_);
+    results_.resolve(results);
+
     // add all new Info to the existing set. after this call,
     // info will only contain duplicates which will require merging
-    info_.merge(info);
+    infos.merge(results.get());
 
-    for(auto& other : info)
+    for(auto& other : results.get())
     {
-        auto it = info_.find(other->id);
-        MRDOX_ASSERT(it != info_.end());
+        auto it = infos.find(other->id);
+        MRDOX_ASSERT(it != infos.end());
         merge(**it, std::move(*other));
     }
 
@@ -93,7 +109,7 @@ mrdox::Expected<InfoSet>
 InfoExecutionContext::
 results()
 {
-    return std::move(info_);
+    return results_.release();
 }
 
 // ----------------------------------------------------------------
@@ -103,13 +119,13 @@ results()
 void
 BitcodeExecutionContext::
 report(
-    InfoSet&& results,
+    UnresolvedInfoSet&& results,
     Diagnostics&& diags)
 {
-    InfoSet info = std::move(results);
+    // InfoSet info = std::move(results);
 
     std::lock_guard<std::mutex> lock(mutex_);
-    for(auto& I : info)
+    for(auto& I : results.get())
     {
         auto bitcode = writeBitcode(*I);
         auto [it, created] = bitcode_.try_emplace(I->id);

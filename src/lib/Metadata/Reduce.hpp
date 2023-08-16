@@ -12,6 +12,7 @@
 #ifndef MRDOX_LIB_METADATA_REDUCE_HPP
 #define MRDOX_LIB_METADATA_REDUCE_HPP
 
+#include "lib/Lib/Info.hpp"
 #include <mrdox/Metadata/Info.hpp>
 #include <mrdox/MetadataFwd.hpp>
 #include <mrdox/Support/Error.hpp>
@@ -29,6 +30,15 @@ void merge(EnumInfo& I, EnumInfo&& Other);
 void merge(FieldInfo& I, FieldInfo&& Other);
 void merge(VariableInfo& I, VariableInfo&& Other);
 void merge(SpecializationInfo& I, SpecializationInfo&& Other);
+
+void resolve(NamespaceInfo& I, UnresolvedInfoSet& Info);
+void resolve(RecordInfo& I, UnresolvedInfoSet& Info);
+void resolve(FunctionInfo& I, UnresolvedInfoSet& Info);
+void resolve(TypedefInfo& I, UnresolvedInfoSet& Info);
+void resolve(EnumInfo& I, UnresolvedInfoSet& Info);
+void resolve(FieldInfo& I, UnresolvedInfoSet& Info);
+void resolve(VariableInfo& I, UnresolvedInfoSet& Info);
+void resolve(SpecializationInfo& I, UnresolvedInfoSet& Info);
 
 //
 // This file defines the merging of different types of infos. The data in the

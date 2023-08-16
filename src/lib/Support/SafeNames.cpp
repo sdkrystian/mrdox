@@ -22,6 +22,7 @@
 namespace clang {
 namespace mrdox {
 
+#if 0
 namespace {
 
 /*
@@ -254,6 +255,7 @@ public:
 };
 
 } // (anon)
+#endif
 
 //------------------------------------------------
 
@@ -263,7 +265,7 @@ SafeNames(
     Corpus const& corpus)
     : corpus_(corpus)
     //, map_(PrettyBuilder(corpus).map)
-    , map_(UglyBuilder(corpus).map)
+    // , map_(UglyBuilder(corpus).map)
 {
 }
 
@@ -272,7 +274,7 @@ SafeNames(
     Corpus const& corpus)
     : corpus_(corpus)
     //, map_(PrettyBuilder(corpus).map)
-    , map_(UglyBuilder(corpus).map)
+    // , map_(UglyBuilder(corpus).map)
 {
 }
 
@@ -296,8 +298,8 @@ getPath(
     dest.clear();
     dest.reserve(1 + Parents.size());
     dest.push_back(get(id));
-    for(auto const& id : llvm::reverse(Parents))
-        dest.push_back(get(id));
+    for(auto const& parent : llvm::reverse(Parents))
+        dest.push_back(get(parent->id));
     return dest;
 }
 

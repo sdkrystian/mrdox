@@ -71,10 +71,12 @@ public:
     requires std::is_enum_v<Enum>
     void emitRecord(Enum Value, RecordID ID);
 
-    void emitRecord(std::vector<SymbolID> const& Values, RecordID ID);
+    void emitRecord(const std::vector<const Info*>& Values, RecordID ID);
+    void emitRecord(const std::vector<SymbolID>& Values, RecordID ID);
     // void emitRecord(std::vector<SpecializedMember> const& list, RecordID ID);
 
-    void emitRecord(SymbolID const& Str, RecordID ID);
+    void emitRecord(const Info* info, RecordID ID);
+    void emitRecord(const SymbolID& Sym, RecordID ID);
     void emitRecord(llvm::StringRef Str, RecordID ID);
     void emitRecord(Location const& Loc, RecordID ID);
     void emitRecord(bool Value, RecordID ID);

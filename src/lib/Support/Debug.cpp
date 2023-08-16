@@ -129,6 +129,7 @@ format(
     if(! i.Name.empty())
         str += fmt::format(", name = '{}'", i.Name);
     str += fmt::format(", ID = {}", i.id);
+    #if 0
     if(! i.Namespace.empty())
     {
         std::string namespaces;
@@ -140,5 +141,6 @@ format(
         }
         str += fmt::format(", namespace = {}", namespaces);
     }
+    #endif
     return fmt::formatter<std::string>::format(std::move(str), ctx);
 }

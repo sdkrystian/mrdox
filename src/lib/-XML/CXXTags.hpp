@@ -210,7 +210,8 @@ writeType(
 
             if constexpr(requires { t.id; })
             {
-                attrs.push({t.id});
+                if(t.id)
+                    attrs.push({t.id->id});
             }
 
             // KRYSTIAN FIXME: parent should is a type itself
@@ -368,7 +369,8 @@ inline void writeTemplateArg(const TArg& I, XMLTags& tags)
             if constexpr(T::isTemplate())
             {
                 attrs.push({"name", A.Name});
-                attrs.push({A.Template});
+                if(A.Template)
+                    attrs.push({A.Template->id});
             }
 
             tags.write(targTagName, {},

@@ -94,7 +94,7 @@ struct TemplateTArg
     : IsTArg<TArgKind::Template>
 {
     /** SymbolID of the referenced template. */
-    SymbolID Template;
+    const Info* Template;
 
     /** Name of the referenced template. */
     std::string Name;
@@ -286,7 +286,7 @@ struct TemplateInfo
 
     /** Primary template ID for partial and explicit specializations.
     */
-    OptionalSymbolID Primary;
+    const Info* Primary;
 
     // KRYSTIAN NOTE: using the presence of args/params
     // to determine the specialization kind *should* work.

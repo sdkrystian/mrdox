@@ -153,11 +153,11 @@ traverse(
     NamespaceInfo const& I,
     F&& f, Args&&... args) const
 {
-    for(auto const& id : I.Members)
-        visit(get(id), std::forward<F>(f),
+    for(const Info* M : I.Members)
+        visit(*M, std::forward<F>(f),
             std::forward<Args>(args)...);
-    for(auto const& id : I.Specializations)
-        visit(get(id), std::forward<F>(f),
+    for(const Info* S : I.Specializations)
+        visit(*S, std::forward<F>(f),
             std::forward<Args>(args)...);
 }
 
@@ -168,11 +168,11 @@ traverse(
     RecordInfo const& I,
     F&& f, Args&&... args) const
 {
-    for(auto const& id : I.Members)
-        visit(get(id), std::forward<F>(f),
+    for(const Info* M : I.Members)
+        visit(*M, std::forward<F>(f),
             std::forward<Args>(args)...);
-    for(auto const& id : I.Specializations)
-        visit(get(id), std::forward<F>(f),
+    for(const Info* S : I.Specializations)
+        visit(*S, std::forward<F>(f),
             std::forward<Args>(args)...);
 }
 
@@ -183,8 +183,8 @@ traverse(
     SpecializationInfo const& I,
     F&& f, Args&&... args) const
 {
-    for(auto const& J : I.Members)
-        visit(get(J.Specialized),
+    for(auto const& S : I.Members)
+        visit(*S.Specialized,
             std::forward<F>(f),
                 std::forward<Args>(args)...);
 }

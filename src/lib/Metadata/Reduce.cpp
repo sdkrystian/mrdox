@@ -13,6 +13,7 @@
 #include <mrdox/Metadata.hpp>
 #include <mrdox/Platform.hpp>
 #include <llvm/ADT/STLExtras.h>
+#include <algorithm>
 
 namespace clang {
 namespace mrdox {
@@ -128,15 +129,19 @@ static void mergeExprInfo(
 static
 void
 reduceSymbolIDs(
-    std::vector<SymbolID>& list,
-    std::vector<SymbolID>&& otherList)
+    std::vector<const Info*>& list,
+    std::vector<const Info*>&& otherList)
 {
-    for(auto const& id : otherList)
+    for(auto const& other : otherList)
     {
-        auto it = llvm::find(list, id);
+        auto it = std::find_if(list.begin(), list.end(),
+            [&](const Info* info)
+            {
+                return info->id == other->id;
+            });
         if(it != list.end())
             continue;
-        list.push_back(id);
+        list.push_back(other);
     }
 }
 
@@ -265,7 +270,7 @@ void merge(VariableInfo& I, VariableInfo&& Other)
 void merge(SpecializationInfo& I, SpecializationInfo&& Other)
 {
     MRDOX_ASSERT(canMerge(I, Other));
-    if(I.Primary == SymbolID::zero)
+    if(! I.Primary)
         I.Primary = Other.Primary;
     if(I.Args.empty())
         I.Args = std::move(Other.Args);

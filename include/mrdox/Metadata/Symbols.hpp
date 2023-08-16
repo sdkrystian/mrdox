@@ -38,8 +38,9 @@ public:
 
     constexpr SymbolID() = default;
 
-    template<typename Elem>
-    SymbolID(const Elem* src)
+    template<std::integral Elem>
+    explicit SymbolID(
+        const Elem* src)
     {
         for(auto& c : data_)
             c = *src++;

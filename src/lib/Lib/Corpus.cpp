@@ -13,6 +13,7 @@
 #include <mrdox/Corpus.hpp>
 #include <mrdox/Metadata.hpp>
 #include <mrdox/Support/Error.hpp>
+#include <ranges>
 
 namespace clang {
 namespace mrdox {
@@ -50,6 +51,7 @@ getFullyQualifiedName(
     std::string& temp) const
 {
     temp.clear();
+    #if 0
     for(auto const& ns_id : llvm::reverse(I.Namespace))
     {
         if(const Info* ns = find(ns_id))
@@ -59,6 +61,16 @@ getFullyQualifiedName(
 
         temp.append("::");
     }
+    #else
+    for(auto const& parent : std::views::reverse(I.Namespace))
+    {
+        if(parent)
+            temp.append(parent->Name);
+        else
+            temp.append("<unnamed>");
+        temp.append("::");
+    }
+    #endif
     auto s = I.extractName();
     temp.append(s.data(), s.size());
     return temp;

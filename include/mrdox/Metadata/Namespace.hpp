@@ -33,8 +33,8 @@ union NamespaceFlags
 struct NamespaceInfo
     : IsInfo<InfoKind::Namespace>
 {
-    std::vector<SymbolID> Members;
-    std::vector<SymbolID> Specializations;
+    std::vector<const Info*> Members;
+    std::vector<const Info*> Specializations;
 
     NamespaceFlags specs;
 

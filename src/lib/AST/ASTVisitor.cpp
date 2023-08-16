@@ -76,7 +76,9 @@ public:
     SourceManager& source_;
     Sema& sema_;
 
-    InfoSet info_;
+    // InfoSet info_;
+    // UnresolvedInfoSet unresolved_;
+    UnresolvedInfoSet info_;
 
     struct FileFilter
     {
@@ -166,32 +168,48 @@ public:
             std::vector<Decl*>{context_.getTranslationUnitDecl()});
     }
 
-    InfoSet& results()
+    UnresolvedInfoSet results()
     {
-        return info_;
+        return std::move(info_);
     }
 
     //------------------------------------------------
 
-    Info*
-    getInfo(const SymbolID& id)
+    void
+    findInfo(
+        const Decl* D,
+        const Info*& I)
     {
-        if(auto it = info_.find(id); it != info_.end())
-            return it->get();
-        return nullptr;
+        SymbolID id;
+        if(! extractSymbolID(D, id))
+            return;
+        info_.find(id, I);
+    }
+
+    void
+    findInfo(
+        const SymbolID& id,
+        const Info*& I)
+    {
+        info_.find(id, I);
+    }
+
+    Info*
+    findInfo(const SymbolID& id)
+    {
+        return info_.find(id);
     }
 
     template<typename InfoTy>
     std::pair<InfoTy&, bool>
     getOrCreateInfo(const SymbolID& id)
     {
-        Info* info = getInfo(id);
+        Info* info = findInfo(id);
         bool created = false;
         if(! info)
         {
-            auto [it, inserted] = info_.emplace(
+            info = info_.emplace(
                 std::make_unique<InfoTy>(id));
-            info = it->get();
             created = true;
         }
         MRDOX_ASSERT(info->Kind == InfoTy::kind_id);
@@ -204,7 +222,7 @@ public:
     getOrBuildInfo(Decl* D)
     {
         SymbolID id = extractSymbolID(D);
-        Info* info = getInfo(id);
+        Info* info = findInfo(id);
 
         if(config_->extract.referencedDeclarations ==
             Config::ExtractOptions::Policy::Never)
@@ -248,7 +266,7 @@ public:
 
         traverseDecl(D);
 
-        return getInfo(id);
+        return findInfo(id);
     }
 
     //------------------------------------------------
@@ -444,8 +462,9 @@ public:
 
             if(! N->isImplicit())
             {
-                if(Info* NI = getOrBuildInfo(N))
-                    I->id = NI->id;
+                findInfo(N, I->id);
+                // if(Info* NI = getOrBuildInfo(N))
+                //     I->id = NI->id;
             }
         }
         return I;
@@ -1259,8 +1278,8 @@ public:
                     ! isa<BuiltinTemplateDecl>(TD))
                 {
                     Decl* D = getInstantiatedFrom(TD);
-                    if(Info* I = getOrBuildInfo(D))
-                        R->Template = I->id;
+                    findInfo(D, R->Template);
+                    // R->Template = getOrBuildInfo(D);
                 }
             }
             else
@@ -1323,7 +1342,7 @@ public:
         ClassTemplateSpecializationDecl* spec)
     {
         if(Decl* primary = getInstantiatedFrom(spec->getSpecializedTemplate()))
-            extractSymbolID(primary, I.Primary.emplace());
+            findInfo(primary, I.Primary);
         // KRYSTIAN NOTE: when this is a partial specialization, we could use
         // ClassTemplatePartialSpecializationDecl::getTemplateArgsAsWritten
         const TypeSourceInfo* type_written = spec->getTypeAsWritten();
@@ -1346,7 +1365,7 @@ public:
         // the USR of the templated VarDecl seems to be the correct one.
         if(auto* primary = dyn_cast<VarTemplateDecl>(
             getInstantiatedFrom(spec->getSpecializedTemplate())))
-            extractSymbolID(primary->getTemplatedDecl(), I.Primary.emplace());
+            findInfo(primary->getTemplatedDecl(), I.Primary);
         const ASTTemplateArgumentListInfo* args_written = nullptr;
         // getTemplateArgsInfo returns nullptr for partial specializations,
         // so we use getTemplateArgsAsWritten if this is a partial specialization
@@ -1368,7 +1387,7 @@ public:
     {
         // KRYSTIAN NOTE: do we need to check I->Primary.has_value()?
         if(Decl* primary = getInstantiatedFrom(spec->getTemplate()))
-            extractSymbolID(primary, I.Primary.emplace());
+            findInfo(primary, I.Primary);
         // TemplateArguments is used instead of TemplateArgumentsAsWritten
         // because explicit specializations of function templates may have
         // template arguments deduced from their return type and parameters
@@ -1385,7 +1404,7 @@ public:
         if(spec->getNumTemplates() == 1)
         {
             if(Decl* primary = getInstantiatedFrom(spec->getTemplate(0)))
-                extractSymbolID(primary, I.Primary.emplace());
+                findInfo(primary, I.Primary);
         }
 
         buildTemplateArgs(I.Args, std::views::transform(
@@ -1635,7 +1654,7 @@ public:
                 parent_id = SymbolID::zero;
                 auto [P, created] = getOrCreateInfo<
                     NamespaceInfo>(parent_id);
-                emplaceChild(P, child_id);
+                emplaceChild(P, findInfo(child_id));
                 break;
             }
             case Decl::Namespace:
@@ -1643,7 +1662,7 @@ public:
                 auto [P, created] = getOrCreateInfo<
                     NamespaceInfo>(parent_id);
                 buildNamespace(P, created, cast<NamespaceDecl>(parent));
-                emplaceChild(P, child_id);
+                emplaceChild(P, findInfo(child_id));
                 break;
             }
             // special case for an explicit specializations of
@@ -1665,7 +1684,8 @@ public:
                     SpecializationInfo>(parent_id);
                 buildSpecialization(P, created, S);
                 // KRYSTIAN FIXME: extract primary/specialized ID properly
-                emplaceChild(P, SpecializedMember(child_id, child_id));
+                emplaceChild(P, SpecializedMember(
+                    nullptr, findInfo(child_id)));
                 break;
             }
             // non-implicit instantiations should be
@@ -1678,7 +1698,7 @@ public:
                 auto [P, created] = getOrCreateInfo<
                     RecordInfo>(parent_id);
                 buildRecord(P, created, cast<CXXRecordDecl>(parent));
-                emplaceChild(P, child_id);
+                emplaceChild(P, findInfo(child_id));
                 break;
             }
             // KRYSTIAN FIXME: we may need to handle
@@ -1689,7 +1709,7 @@ public:
                 // and do not include them in the list of parents.
                 continue;
             }
-            I.Namespace.emplace_back(parent_id);
+            I.Namespace.emplace_back(findInfo(parent_id));
             child = parent;
             child_id = parent_id;
         }
@@ -1707,12 +1727,10 @@ public:
         if constexpr(requires { I.Specializations; })
         {
             auto& S = I.Members;
-            if(Info* child = getInfo(C);
-                child && child->isSpecialization())
+            if(C && C->isSpecialization())
             {
                 if(std::find(S.begin(), S.end(), C) == S.end())
                     S.emplace_back(C);
-                return;
             }
         }
         auto& M = I.Members;
@@ -1737,7 +1755,7 @@ public:
         buildTemplateArgs(I.Args,
             D->getTemplateArgs().asArray());
 
-        extractSymbolID(PD, I.Primary);
+        findInfo(PD, I.Primary);
         I.Name = extractName(PD);
 
         getParentNamespaces(I, D);
@@ -2127,12 +2145,12 @@ public:
                 // the semantic DeclContext of a FriendDecl must be a class
                 MRDOX_ASSERT(RD);
                 SymbolID parent_id = extractSymbolID(RD);
-                if(Info* parent = getInfo(parent_id))
+                if(Info* parent = findInfo(parent_id))
                 {
                     MRDOX_ASSERT(parent->isRecord());
                     // parent->Implicit &= forceExtract_;
                     parent->Implicit &= currentMode() != ExtractMode::Normal;
-                    static_cast<RecordInfo*>(parent)->Friends.emplace_back(I.id);
+                    static_cast<RecordInfo*>(parent)->Friends.emplace_back(&I);
                 }
 
                 return;
@@ -2749,7 +2767,7 @@ class ASTVisitorConsumer
         // then this line won't execute, which means we
         // will miss error and warnings emitted before
         // the return.
-        ex_.report(std::move(visitor.results()), std::move(diags));
+        ex_.report(visitor.results(), std::move(diags));
     }
 
     /** Skip function bodies

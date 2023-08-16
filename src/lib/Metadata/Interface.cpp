@@ -102,9 +102,9 @@ private:
 #endif
         }
 
-        for(auto const& id : From.Members)
+        for(const Info* M : From.Members)
         {
-            const auto& I = corpus_.get<Info>(id);
+            const auto& I = *M;
             auto actualAccess = effectiveAccess(access, I.Access);
             if(I.Kind == InfoKind::Function)
             {

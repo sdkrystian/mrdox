@@ -85,6 +85,9 @@ public:
     getOptional(
         SymbolID const& id) const;
 
+    dom::Value
+    get(const Info* info) const;
+
     /** Return a Dom value representing the Javadoc.
 
         The default implementation returns null. A

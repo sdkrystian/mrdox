@@ -117,7 +117,7 @@ struct TagTypeInfo
     QualifierKind CVQualifiers = QualifierKind::None;
     std::unique_ptr<TypeInfo> ParentType;
     std::string Name;
-    SymbolID id = SymbolID::zero;
+    const Info* id = nullptr;
 };
 
 struct SpecializationTypeInfo
@@ -126,7 +126,7 @@ struct SpecializationTypeInfo
     QualifierKind CVQualifiers = QualifierKind::None;
     std::unique_ptr<TypeInfo> ParentType;
     std::string Name;
-    SymbolID id = SymbolID::zero;
+    const Info* id = nullptr;
     std::vector<std::unique_ptr<TArg>> TemplateArgs;
 };
 
