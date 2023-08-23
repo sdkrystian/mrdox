@@ -17,6 +17,7 @@
 #include <mrdox/Metadata/Info.hpp>
 #include <memory>
 #include <ranges>
+#include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -146,14 +147,30 @@ public:
 };
 #else
 
-inline
-bool
-isUnresolved(
-    const Info* info) noexcept
+
+class KnownSymbolIDs
 {
-    return reinterpret_cast<
-        std::uintptr_t>(info) & 1ull;
-}
+    std::unordered_set<SymbolID> known_ids_;
+    std::shared_mutex mutex_;
+
+public:
+    const SymbolID*
+    get(const SymbolID& id)
+    {
+        {
+            std::shared_lock read_lock(mutex_);
+            auto it = known_ids_.find(id);
+            if(it != known_ids_.end())
+                return &*it;
+        }
+        {
+            std::unique_lock write_lock(mutex_);
+            auto [it, created] = known_ids_.emplace(id);
+            MRDOX_ASSERT(created);
+            return &*it;
+        }
+    }
+};
 
 class UnresolvedInfoSet
 {
@@ -195,9 +212,15 @@ class UnresolvedInfoSet
             return;
         // walk the linked list of unresolved Info*,
         // and write the now known pointer value
+        #if 0
         for(Info** head = it->second; head;)
             head = reinterpret_cast<Info**>(
                 std::exchange(*clear_unresolved(head), info));
+        #else
+        for(Info** head = it->second; head;)
+            head = reinterpret_cast<Info**>(
+                std::exchange(*head, info));
+        #endif
         // erase the entry from the unresolved map
         if(erase)
             unresolved_.erase(it);
@@ -241,7 +264,7 @@ public:
         // the destination is used to store a pointer to the next
         // unresolved reference, forming a linked list which is
         // traversed & written with the Info* once it is known
-#if 0
+#if 1
         if(auto [it, created] = unresolved_.emplace(
             id, &dst); ! created)
         {

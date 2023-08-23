@@ -264,14 +264,13 @@ decodeSymbolID(
     const Info*& Field,
     llvm::StringRef Blob)
 {
-    if (R[0] != BitCodeConstants::USRHashSize)
-        return formatError("USR digest size={}", R[0]);
-    // UnresolvedInfoSet is required to resolve Info references
-    if(! unresolved_)
-        return Error::success();
+    auto first = R.begin();
+    if(*first != BitCodeConstants::USRHashSize)
+        return formatError("USR digest size={}", *first);
 
-    SymbolID id(&R[1]);
-    unresolved_->find(id, Field);
+    std::array<std::uint8_t, 20> bytes;
+    std::uninitialized_copy_n(++first, 20, bytes.data());
+    unresolved_->find(SymbolID(bytes), Field);
 
     return Error::success();
 }
@@ -283,17 +282,15 @@ decodeSymbolIDs(
     std::vector<const Info*>& Field,
     llvm::StringRef Blob)
 {
-    auto src = R.begin();
-    auto n = *src++;
-    Field.resize(n);
-    auto* dest = &Field[0];
-    while(n--)
+    auto first = R.begin();
+    auto n = *first++;
+    Field.reserve(n);
+    for(; n--; first += 20)
     {
-        SymbolID id(src);
+        std::array<std::uint8_t, 20> bytes;
+        std::uninitialized_copy_n(first, 20, bytes.data());
         // UnresolvedInfoSet is required to resolve Info references
-        if(unresolved_)
-            unresolved_->find(id, *dest++);
-        src += BitCodeConstants::USRHashSize;
+        unresolved_->find(SymbolID(bytes), Field.emplace_back());
     }
     return Error::success();
 }

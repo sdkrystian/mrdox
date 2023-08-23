@@ -18,6 +18,8 @@
 #include <cstdint>
 #include <cstring>
 #include <compare>
+#include <memory>
+#include <span>
 #include <string_view>
 
 namespace clang {
@@ -38,12 +40,10 @@ public:
 
     constexpr SymbolID() = default;
 
-    template<std::integral Elem>
-    explicit SymbolID(
-        const Elem* src)
+    SymbolID(std::span<const value_type, 20> bytes)
     {
-        for(auto& c : data_)
-            c = *src++;
+        std::uninitialized_copy_n(
+            bytes.data(), 20, data_);
     }
 
     constexpr bool empty() const noexcept

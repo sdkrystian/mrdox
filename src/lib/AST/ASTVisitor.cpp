@@ -68,6 +68,7 @@ namespace {
 class ASTVisitor
 {
 public:
+    ExecutionContext& execution_;
     const ConfigImpl& config_;
     Diagnostics diags_;
 
@@ -145,12 +146,14 @@ public:
     }
 
     ASTVisitor(
+        ExecutionContext& execution,
         const ConfigImpl& config,
         Diagnostics& diags,
         CompilerInstance& compiler,
         ASTContext& context,
         Sema& sema) noexcept
-        : config_(config)
+        : execution_(execution)
+        , config_(config)
         , diags_(diags)
         , compiler_(compiler)
         , context_(context)
@@ -183,7 +186,8 @@ public:
         SymbolID id;
         if(! extractSymbolID(D, id))
             return;
-        info_.find(id, I);
+        findInfo(id, I);
+        // info_.find(id, I);
     }
 
     void
@@ -191,7 +195,9 @@ public:
         const SymbolID& id,
         const Info*& I)
     {
-        info_.find(id, I);
+        // info_.find(id, I);
+        I = reinterpret_cast<const Info*>(
+            execution_.symbols().get(id));
     }
 
     Info*
@@ -294,7 +300,8 @@ public:
         if(index::generateUSRForDecl(D, usr_))
             return false;
         id = SymbolID(llvm::SHA1::hash(
-            arrayRefFromStringRef(usr_)).data());
+            arrayRefFromStringRef(usr_)));
+        // execution_.symbols().get(id);
         return true;
     }
 
@@ -2752,6 +2759,7 @@ class ASTVisitorConsumer
             return;
 
         ASTVisitor visitor(
+            ex_,
             config_,
             diags,
             compiler_,

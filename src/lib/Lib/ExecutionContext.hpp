@@ -37,6 +37,7 @@ class ExecutionContext
 {
 protected:
     const ConfigImpl& config_;
+    KnownSymbolIDs known_ids_;
 
 public:
     ExecutionContext(
@@ -58,6 +59,11 @@ public:
     virtual
     mrdox::Expected<InfoSet>
     results() = 0;
+
+    KnownSymbolIDs& symbols()
+    {
+        return known_ids_;
+    }
 };
 
 // ----------------------------------------------------------------

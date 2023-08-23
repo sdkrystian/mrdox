@@ -104,14 +104,14 @@ decodeRecord(
     std::vector<SymbolID>& f,
     llvm::StringRef blob)
 {
-    auto src = R.begin();
-    auto n = *src++;
-    f.resize(n);
-    auto* dest = &f[0];
-    while(n--)
+    auto first = R.begin();
+    auto n = *first++;
+    f.reserve(n);
+    for(; n--; first += 20)
     {
-        *dest++ = SymbolID(src);
-        src += BitCodeConstants::USRHashSize;
+        std::array<std::uint8_t, 20> bytes;
+        std::uninitialized_copy_n(first, 20, bytes.data());
+        f.emplace_back(bytes);
     }
     return Error::success();
 }
@@ -123,10 +123,12 @@ decodeRecord(
     SymbolID& Field,
     llvm::StringRef Blob)
 {
-    if (R[0] != BitCodeConstants::USRHashSize)
-        return formatError("USR digest size={}", R[0]);
-
-    Field = SymbolID(&R[1]);
+    auto first = R.begin();
+    if(*first != BitCodeConstants::USRHashSize)
+        return formatError("USR digest size={}", *first);
+    std::array<std::uint8_t, 20> bytes;
+    std::uninitialized_copy_n(++first, 20, bytes.data());
+    Field = SymbolID(bytes);
     return Error::success();
 }
 

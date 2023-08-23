@@ -26,10 +26,10 @@ namespace mrdox {
 struct SpecializedMember
 {
     /** ID of the member in the primary template */
-    const Info* Primary;
+    const Info* Primary = nullptr;
 
     /** ID of the member specialization */
-    const Info* Specialized;
+    const Info* Specialized = nullptr;
 
     SpecializedMember() = default;
 

@@ -67,39 +67,6 @@ reduce(
     return Merged;
 }
 
-// Return the index of the matching child in the list,
-// or -1 if merge is not necessary.
-template <typename T>
-int
-getChildIndexIfExists(
-    std::vector<T>& Children,
-    T& ChildToMerge)
-{
-    for (unsigned long I = 0; I < Children.size(); I++)
-    {
-        if (ChildToMerge.id == Children[I].id)
-            return I;
-    }
-    return -1;
-}
-
-template<typename T>
-void
-reduceChildren(
-    std::vector<T>& Children,
-    std::vector<T>&& ChildrenToMerge)
-{
-    for (auto& ChildToMerge : ChildrenToMerge)
-    {
-        int MergeIdx = getChildIndexIfExists(Children, ChildToMerge);
-        if (MergeIdx == -1) {
-            Children.push_back(std::move(ChildToMerge));
-            continue;
-        }
-        merge(Children[MergeIdx], std::move(ChildToMerge));
-    }
-}
-
 } // mrdox
 } // clang
 

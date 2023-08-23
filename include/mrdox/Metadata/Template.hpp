@@ -52,8 +52,7 @@ struct TArg
 
 protected:
     constexpr
-    TArg(
-        TArgKind kind) noexcept
+    TArg(TArgKind kind) noexcept
         : Kind(kind)
     {
     }
@@ -94,7 +93,7 @@ struct TemplateTArg
     : IsTArg<TArgKind::Template>
 {
     /** SymbolID of the referenced template. */
-    const Info* Template;
+    const Info* Template = nullptr;
 
     /** Name of the referenced template. */
     std::string Name;
@@ -286,7 +285,7 @@ struct TemplateInfo
 
     /** Primary template ID for partial and explicit specializations.
     */
-    const Info* Primary;
+    const Info* Primary = nullptr;
 
     // KRYSTIAN NOTE: using the presence of args/params
     // to determine the specialization kind *should* work.
