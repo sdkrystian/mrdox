@@ -98,6 +98,8 @@ struct InfoPtrEqual
 
 class IdentifierPattern
 {
+    // pattern without any wildcards
+    std::string raw_;
     std::vector<std::string_view> parts_;
     std::size_t min_size_ = 0;
 
@@ -115,8 +117,10 @@ public:
     bool
     matches(std::string_view str) const;
 
+#if 0
     bool
     subsumes(std::string_view pattern) const;
+#endif
 
     bool
     subsumes(const IdentifierPattern& other) const;
@@ -128,6 +132,7 @@ IdentifierPattern(
 {
     if(pattern.empty())
         return;
+    raw_.reserve(pattern.size());
     const auto last = pattern.end();
     auto first = pattern.begin();
     auto part_first = first;
@@ -137,9 +142,9 @@ IdentifierPattern(
         if(++first != last &&
             wildcard == (*first == '*'))
             continue;
-        // empty string_view indicates a wildcard
-        min_size_ += parts_.emplace_back(part_first,
-            wildcard ? part_first : first).size();
+        auto raw_start = raw_.data() + raw_.size();
+        raw_.append(part_first, wildcard ? part_first : first);
+        parts_.emplace_back(raw_start, raw_.data() + raw_.size());
 
         wildcard = ! wildcard;
         part_first = first;
@@ -206,6 +211,7 @@ matches(std::string_view str) const
     return matches_slow(str, parts_);
 }
 
+#if 0
 bool
 IdentifierPattern::
 subsumes(std::string_view pattern) const
@@ -219,22 +225,15 @@ subsumes(std::string_view pattern) const
         without_wildcards.begin(),
         without_wildcards.end()));
 }
+#endif
 
 
 bool
 IdentifierPattern::
 subsumes(const IdentifierPattern& other) const
 {
-    // KRYSTIAN FIXME: we really shouldn't need to use
-    // std::string here; would be better to just make
-    // matches work with ranges.
-    auto without_wildcards =
-        std::views::join(other.parts_);
-    return matches(std::string(
-        without_wildcards.begin(),
-        without_wildcards.end()));
+    return matches(other.raw_);
 }
-
 struct FilterNode
 {
     IdentifierPattern Pattern;
@@ -286,6 +285,7 @@ struct FilterNode
         }
     }
 
+    #if 0
     FilterNode*
     findChild(
         std::string_view name)
@@ -295,6 +295,7 @@ struct FilterNode
                 return &child;
         return nullptr;
     }
+    #endif
 
     FilterNode*
     findChild(
