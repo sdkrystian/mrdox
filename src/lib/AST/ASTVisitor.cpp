@@ -94,57 +94,60 @@ struct InfoPtrEqual
     }
 };
 
-//------------------------------------------------
+}
 
+//------------------------------------------------
 class IdentifierPattern
 {
     // pattern without any wildcards
     std::string raw_;
-    std::vector<std::string_view> parts_;
-    std::size_t min_size_ = 0;
+    // pattern part lengths, where zero represents a wildcard
+    std::vector<std::size_t> parts_;
 
     bool
-    matches_slow(
+    matchesSlow(
         std::string_view str,
-        std::span<const std::string_view> parts) const;
+        std::string_view pattern,
+        std::span<const std::size_t> parts) const;
 
 public:
-    IdentifierPattern(std::string_view pattern) noexcept;
+    IdentifierPattern();
+    IdentifierPattern(std::string_view pattern);
 
-    bool operator==(
-        const IdentifierPattern&) const noexcept = default;
+    bool
+    operator==(const IdentifierPattern&) const noexcept = default;
 
     bool
     matches(std::string_view str) const;
-
-#if 0
-    bool
-    subsumes(std::string_view pattern) const;
-#endif
 
     bool
     subsumes(const IdentifierPattern& other) const;
 };
 
 IdentifierPattern::
+IdentifierPattern()
+    : parts_(1, 0)
+{
+}
+
+IdentifierPattern::
 IdentifierPattern(
-    std::string_view pattern) noexcept
+    std::string_view pattern)
 {
     if(pattern.empty())
         return;
-    raw_.reserve(pattern.size());
     const auto last = pattern.end();
     auto first = pattern.begin();
     auto part_first = first;
     bool wildcard = *first == '*';
     do
     {
-        if(++first != last &&
-            wildcard == (*first == '*'))
+        if(++first != last && wildcard == (*first == '*'))
             continue;
-        auto raw_start = raw_.data() + raw_.size();
-        raw_.append(part_first, wildcard ? part_first : first);
-        parts_.emplace_back(raw_start, raw_.data() + raw_.size());
+        std::string_view part(part_first,
+            wildcard ? part_first : first);
+        raw_.append(part);
+        parts_.emplace_back(part.size());
 
         wildcard = ! wildcard;
         part_first = first;
@@ -154,12 +157,14 @@ IdentifierPattern(
 
 bool
 IdentifierPattern::
-matches_slow(
+matchesSlow(
     std::string_view str,
-    std::span<const std::string_view> parts) const
+    std::string_view pattern,
+    std::span<const std::size_t> parts) const
 {
     MRDOX_ASSERT(! parts.empty());
-    const auto& part = parts.front();
+    const auto& part = pattern.substr(0, parts[0]);
+    pattern.remove_prefix(parts[0]);
     parts = parts.subspan(1);
     // current part is not a wild card
     if(! part.empty())
@@ -177,14 +182,14 @@ matches_slow(
         // a wildcard, the entire string matches
         if(parts.size() == 1)
             return true;
-        return matches_slow(str, parts);
+        return matchesSlow(str, pattern, parts);
     }
     // current part is a wildcard.
     // check all possible lengths for this wildcard until we
     // either find a match, or we run out of characters.
     for(; ! str.empty(); str.remove_prefix(1))
     {
-        if(matches_slow(str, parts))
+        if(matchesSlow(str, pattern, parts))
             return true;
     }
     return false;
@@ -196,37 +201,19 @@ matches(std::string_view str) const
 {
     if(parts_.size() == 1)
     {
-        const auto& first = parts_.front();
         // pattern is just '*', match everything
-        if(first.empty())
+        if(! parts_[0])
             return true;
         // pattern has no wildcards
-        return str == first;
+        return str == raw_;
     }
     // no match when the string is shorter than
     // the shortest possible match size
-    if(str.size() < min_size_)
+    if(str.size() < raw_.size())
         return false;
     // otherwise, use the wildcard matching algorithm
-    return matches_slow(str, parts_);
+    return matchesSlow(str, raw_, parts_);
 }
-
-#if 0
-bool
-IdentifierPattern::
-subsumes(std::string_view pattern) const
-{
-    // KRYSTIAN FIXME: we really shouldn't need to use
-    // std::string here; would be better to just make
-    // matches work with ranges.
-    auto without_wildcards = std::views::filter(
-        pattern, [](char c) { return c != '*'; });
-    return matches(std::string(
-        without_wildcards.begin(),
-        without_wildcards.end()));
-}
-#endif
-
 
 bool
 IdentifierPattern::
@@ -234,33 +221,35 @@ subsumes(const IdentifierPattern& other) const
 {
     return matches(other.raw_);
 }
+
 struct FilterNode
 {
     IdentifierPattern Pattern;
-    FilterNode* Parent;
     std::vector<FilterNode> Children;
+    bool Allowed : 1 = true;
+    bool ChildrenAllowed : 1 = false;
 
     FilterNode()
-        : Pattern("*")
+        : ChildrenAllowed(true)
     {
     }
 
     FilterNode(
         const IdentifierPattern& pattern,
-        FilterNode* parent = nullptr)
+        bool allowed)
         : Pattern(pattern)
-        , Parent(parent)
+        , Allowed(allowed)
     {
-    }
-
-    bool isRoot() const noexcept
-    {
-        return ! Parent;
     }
 
     bool isTerminal() const noexcept
     {
         return Children.empty();
+    }
+
+    bool shouldEnter() const noexcept
+    {
+        return Allowed || ! isTerminal();// && ChildrenAllowed);
     }
 
     void
@@ -269,6 +258,19 @@ struct FilterNode
         if(! Pattern.subsumes(other.Pattern) &&
             ! other.Pattern.subsumes(Pattern))
             return;
+        #if 0
+        if(isTerminal() != other.isTerminal() &&
+            Allowed == other.Allowed &&
+            // ChildrenAllowed == other.ChildrenAllowed)
+            ! ChildrenAllowed && ! other.ChildrenAllowed)
+        {
+            Children.clear();
+            return;
+        }
+        #endif
+        bool any_allowed = false;
+        // if(Pattern == other.Pattern)
+        ChildrenAllowed |= other.ChildrenAllowed;
         for(auto& other_child : other.Children)
         {
             bool found_exact = false;
@@ -280,22 +282,15 @@ struct FilterNode
                     child.merge(other_child);
                 found_exact |= child.Pattern == other_child.Pattern;
             }
+            // any_allowed |= other_child.Allowed;
+            ChildrenAllowed |= other_child.Allowed;
+            // ChildrenAllowed |= any_allowed;
             if(! found_exact)
                 Children.push_back(other_child);
         }
+        if(! Children.empty())
+            Allowed &= other.Allowed;
     }
-
-    #if 0
-    FilterNode*
-    findChild(
-        std::string_view name)
-    {
-        for(auto& child : Children)
-            if(child.Pattern.matches(name))
-                return &child;
-        return nullptr;
-    }
-    #endif
 
     FilterNode*
     findChild(
@@ -306,23 +301,95 @@ struct FilterNode
         {
             if(! child.Pattern.matches(name))
                 continue;
-            if(! best || child.Pattern.subsumes(best->Pattern))
+            if(! best || best->Pattern.subsumes(child.Pattern))
                 best = &child;
         }
         return best;
     }
 };
 
-struct NamespaceFilter
+struct SymbolFilter
 {
     FilterNode root;
     FilterNode* current = &root;
     bool detached = false;
 
+    class FilterScope
+    {
+        SymbolFilter& filter_;
+        FilterNode* current_prev_;
+        bool detached_prev_;
+
+    public:
+        FilterScope(SymbolFilter& filter)
+            : filter_(filter)
+            , current_prev_(filter.current)
+            , detached_prev_(filter.detached)
+        {
+        }
+
+        ~FilterScope()
+        {
+            filter_.current = current_prev_;
+            filter_.detached = detached_prev_;
+        }
+    };
+
+    void
+    mergeFilter(
+        FilterNode& node,
+        std::span<IdentifierPattern> parts)
+    {
+        if(parts.empty())
+            return;
+        const auto& pattern = parts[0];
+        parts = parts.subspan(1);
+
+        #if 0
+        if(1)
+        {
+            // if the existing node would match everything that
+            // the new pattern would, the new pattern should also
+            // be added as a child of the exist node
+            if(node.Pattern.subsumes(pattern))
+                node.Children.emplace_back();
+        }
+        #endif
+
+        std::vector<FilterNode> inherited;
+        bool exact_match = false;
+        for(FilterNode& child : node.Children)
+        {
+            // if the new pattern would match everything
+            // that the child node would, merge the sebsequent
+            // patterns into the child node
+            if(pattern.subsumes(child.Pattern))
+                mergeFilter(child, parts);
+            exact_match |= child.Pattern == pattern;
+            // if an exact match has not been found, collect the
+            // existing children which would match this pattern
+            if(! exact_match && child.Pattern.subsumes(pattern))
+            {
+                inherited.insert(inherited.end(),
+                    child.Children.begin(),
+                    child.Children.end());
+            }
+        }
+
+        if(! exact_match)
+        {
+            auto& child = node.Children.emplace_back(pattern, false);
+            child.Children = std::move(inherited);
+            mergeFilter(child, parts);
+        }
+    }
+
     void
     addFilter(
-        std::string_view str)
+        std::string_view str,
+        bool allowed)
     {
+    #if 0
         FilterNode head;
         FilterNode* node = &head;
         if(str.starts_with("::"))
@@ -330,9 +397,10 @@ struct NamespaceFilter
         do
         {
             std::size_t idx = str.find("::");
-
+            node->ChildrenAllowed = allowed;
             node = &node->Children.emplace_back(
-                str.substr(0, idx), node);
+                str.substr(0, idx), true);
+                // str.substr(0, idx), allowed);
 
             if(idx == std::string_view::npos)
                 break;
@@ -340,9 +408,36 @@ struct NamespaceFilter
         }
         while(! str.empty());
 
+        node->Allowed = allowed;
+        node->ChildrenAllowed = allowed;
+
         root.merge(head);
+    #else
+        // first pattern is a wildcard to match the root node
+        std::vector<IdentifierPattern> parts; // (1);
+        if(str.starts_with("::"))
+            str.remove_prefix(2);
+        do
+        {
+            std::size_t idx = str.find("::");
+            parts.emplace_back(str.substr(0, idx));
+            if(idx == std::string_view::npos)
+                break;
+            str.remove_prefix(idx + 2);
+        }
+        while(! str.empty());
+
+        //for(FilterNode& child : root.Children)
+        // mergeFilter(root, nullptr,
+        //     root.Pattern, parts);
+        mergeFilter(root, parts);
+    #endif
+
+
     }
 };
+
+namespace {
 
 //------------------------------------------------
 //
@@ -396,7 +491,7 @@ public:
     // KRYSTIAN FIXME: this is terrible
     bool forceExtract_ = false;
 
-    NamespaceFilter nsFilter_;
+    SymbolFilter symbolFilter_;
 
     ASTVisitor(
         const ConfigImpl& config,
@@ -422,7 +517,9 @@ public:
             std::vector<Decl*>{context_.getTranslationUnitDecl()});
 
         for(std::string_view ns : config->filters.deny.namespaces)
-            nsFilter_.addFilter(ns);
+            symbolFilter_.addFilter(ns, false);
+        for(std::string_view ns : config->filters.allow.namespaces)
+            symbolFilter_.addFilter(ns, true);
 
     }
 
@@ -1622,6 +1719,73 @@ public:
     {
         namespace path = llvm::sys::path;
 
+        const auto* ND = dyn_cast<NamedDecl>(D);
+        if(ND && ! forceExtract_ && ! symbolFilter_.detached)
+        {
+            std::string name = extractName(ND);
+            // if the name of this namespace matches a child
+            // of the current filter node, then this namespace may
+            // be blacklisted or may contain a blacklisted namespace
+            if(FilterNode* child = symbolFilter_.current->findChild(name))
+            {
+                if(! child->Allowed && ! child->ChildrenAllowed)
+                    return false;
+
+                symbolFilter_.current = child;
+                symbolFilter_.detached = false;
+            }
+            else
+            {
+                if(! symbolFilter_.current->Allowed ||
+                    ! symbolFilter_.current->ChildrenAllowed)
+                    return false;
+                if(const auto* DC = dyn_cast<DeclContext>(D);
+                    ! DC || ! DC->isInlineNamespace())
+                {
+                    // if this namespace does not match a child
+                    // of the current filter node, set the detached flag
+                    // so we don't update the namespace filter state
+                    // while traversing the children of this namespace
+                    // symbolFilter_.detached = true;
+                    symbolFilter_.detached = symbolFilter_.current->isTerminal();
+                }
+            }
+
+            #if 0
+            if(! symbolFilter_.current->Allowed && ! child)
+                return false;
+            if(symbolFilter_.current->ChildrenAllowed && )
+            if()
+            {
+                #if 0
+                // if the node is terminal (i.e. has no children),
+                // it means the namespace is blacklisted
+                if(child->isTerminal())
+                    return false;
+                #else
+                if(! child->shouldEnter())
+                    return false;
+                #endif
+                // otherwise, update the current node
+                symbolFilter_.current = child;
+                symbolFilter_.detached = false;
+            }
+            // if we are entering an inline namespace that does not
+            // match any child nodes, the deattached flag is not set
+            // because inline namespace members can be named as-if they
+            // are members of the innermost enclosing non-inline namespace
+            else if(const auto* DC = dyn_cast<DeclContext>(D);
+                ! DC || ! DC->isInlineNamespace())
+            {
+                // if this namespace does not match a child
+                // of the current filter node, set the detached flag
+                // so we don't update the namespace filter state
+                // while traversing the children of this namespace
+                symbolFilter_.detached = true;
+            }
+            #endif
+        }
+
         // skip system header
         if(! forceExtract_ && source_.isInSystemHeader(D->getLocation()))
             return false;
@@ -2315,38 +2479,6 @@ traverse(NamespaceDecl* D)
         D->isAnonymousNamespace())
         return true;
 
-    FilterNode* prev_node = nsFilter_.current;
-    bool prev_detached = nsFilter_.detached;
-    if(! forceExtract_ && ! prev_detached)
-    {
-        std::string name = extractName(D);
-        // if the name of this namespace matches a child
-        // of the current filter node, then this namespace may
-        // be blacklisted or may contain a blacklisted namespace
-        if(FilterNode* child = prev_node->findChild(name))
-        {
-            // if the node is terminal (i.e. has no children),
-            // it means the namespace is blacklisted
-            if(child->isTerminal())
-                return true;
-            // otherwise, update the current node
-            nsFilter_.current = child;
-            nsFilter_.detached = false;
-        }
-        // if we are entering an inline namespace that does not
-        // match any child nodes, the deattached flag is not set
-        // because inline namespace members can be named as-if they
-        // are members of the innermost enclosing non-inline namespace
-        else if(! D->isInlineNamespace())
-        {
-            // if this namespace does not match a child
-            // of the current filter node, set the detached flag
-            // so we don't update the namespace filter state
-            // while traversing the children of this namespace
-            nsFilter_.detached = true;
-        }
-    }
-
     SymbolID id;
     if(! extractSymbolID(D, id))
         return true;
@@ -2355,13 +2487,6 @@ traverse(NamespaceDecl* D)
     buildNamespace(I, created, D);
 
     traverseContext(D);
-
-    // restore the previous filter node
-    if(! forceExtract_)
-    {
-        nsFilter_.current = prev_node;
-        nsFilter_.detached = prev_detached;
-    }
 
     return true;
 }
@@ -2794,6 +2919,8 @@ traverseDecl(
     MRDOX_ASSERT(D);
     if(D->isInvalidDecl() || D->isImplicit())
         return true;
+
+    SymbolFilter::FilterScope scope(symbolFilter_);
 
     AccessSpecifier access =
         D->getAccessUnsafe();
