@@ -226,13 +226,11 @@ struct FilterNode
 {
     IdentifierPattern Pattern;
     std::vector<FilterNode> Children;
-    bool Allowed : 1 = true;
-    bool ChildrenAllowed : 1 = false;
+    // KRYSTIAN NOTE: unused in the blacklist only
+    // implementation.
+    bool Allowed : 1 = false;
 
-    FilterNode()
-        : ChildrenAllowed(true)
-    {
-    }
+    FilterNode() = default;
 
     FilterNode(
         const IdentifierPattern& pattern,
@@ -245,51 +243,6 @@ struct FilterNode
     bool isTerminal() const noexcept
     {
         return Children.empty();
-    }
-
-    bool shouldEnter() const noexcept
-    {
-        return Allowed || ! isTerminal();// && ChildrenAllowed);
-    }
-
-    void
-    merge(FilterNode& other)
-    {
-        if(! Pattern.subsumes(other.Pattern) &&
-            ! other.Pattern.subsumes(Pattern))
-            return;
-        #if 0
-        if(isTerminal() != other.isTerminal() &&
-            Allowed == other.Allowed &&
-            // ChildrenAllowed == other.ChildrenAllowed)
-            ! ChildrenAllowed && ! other.ChildrenAllowed)
-        {
-            Children.clear();
-            return;
-        }
-        #endif
-        bool any_allowed = false;
-        // if(Pattern == other.Pattern)
-        ChildrenAllowed |= other.ChildrenAllowed;
-        for(auto& other_child : other.Children)
-        {
-            bool found_exact = false;
-            for(auto& child : Children)
-            {
-                if(child.Pattern.subsumes(other_child.Pattern))
-                    other_child.merge(child);
-                if(other_child.Pattern.subsumes(child.Pattern))
-                    child.merge(other_child);
-                found_exact |= child.Pattern == other_child.Pattern;
-            }
-            // any_allowed |= other_child.Allowed;
-            ChildrenAllowed |= other_child.Allowed;
-            // ChildrenAllowed |= any_allowed;
-            if(! found_exact)
-                Children.push_back(other_child);
-        }
-        if(! Children.empty())
-            Allowed &= other.Allowed;
     }
 
     FilterNode*
@@ -342,29 +295,34 @@ struct SymbolFilter
     {
         if(parts.empty())
             return;
+
         const auto& pattern = parts[0];
         parts = parts.subspan(1);
-
-        #if 0
-        if(1)
-        {
-            // if the existing node would match everything that
-            // the new pattern would, the new pattern should also
-            // be added as a child of the exist node
-            if(node.Pattern.subsumes(pattern))
-                node.Children.emplace_back();
-        }
-        #endif
 
         std::vector<FilterNode> inherited;
         bool exact_match = false;
         for(FilterNode& child : node.Children)
         {
-            // if the new pattern would match everything
-            // that the child node would, merge the sebsequent
-            // patterns into the child node
-            if(pattern.subsumes(child.Pattern))
-                mergeFilter(child, parts);
+
+            #if 1
+                // KRYSTIAN NOTE: this is a hack for the blacklist-only
+                // implementation. we don't want to increase the depth of
+                // existing terminal nodes
+                if(pattern.subsumes(child.Pattern))
+                {
+                    if(&child == &root || ! child.isTerminal())
+                        mergeFilter(child, parts);
+                    else
+                        continue;
+                }
+            #else
+                // if the new pattern would match everything
+                // that the child node would, merge the subsequent
+                // patterns into the child node
+                if(pattern.subsumes(child.Pattern))
+                    mergeFilter(child, parts);
+            #endif
+
             exact_match |= child.Pattern == pattern;
             // if an exact match has not been found, collect the
             // existing children which would match this pattern
@@ -375,7 +333,7 @@ struct SymbolFilter
                     child.Children.end());
             }
         }
-
+        // if we didn't find an exact match, add a new node
         if(! exact_match)
         {
             auto& child = node.Children.emplace_back(pattern, false);
@@ -389,32 +347,8 @@ struct SymbolFilter
         std::string_view str,
         bool allowed)
     {
-    #if 0
-        FilterNode head;
-        FilterNode* node = &head;
-        if(str.starts_with("::"))
-            str.remove_prefix(2);
-        do
-        {
-            std::size_t idx = str.find("::");
-            node->ChildrenAllowed = allowed;
-            node = &node->Children.emplace_back(
-                str.substr(0, idx), true);
-                // str.substr(0, idx), allowed);
-
-            if(idx == std::string_view::npos)
-                break;
-            str.remove_prefix(idx + 2);
-        }
-        while(! str.empty());
-
-        node->Allowed = allowed;
-        node->ChildrenAllowed = allowed;
-
-        root.merge(head);
-    #else
-        // first pattern is a wildcard to match the root node
-        std::vector<IdentifierPattern> parts; // (1);
+        // FIXME: this does not handle invalid qualified-ids
+        std::vector<IdentifierPattern> parts;
         if(str.starts_with("::"))
             str.remove_prefix(2);
         do
@@ -426,14 +360,8 @@ struct SymbolFilter
             str.remove_prefix(idx + 2);
         }
         while(! str.empty());
-
-        //for(FilterNode& child : root.Children)
-        // mergeFilter(root, nullptr,
-        //     root.Pattern, parts);
+        // merge the parsed patterns into the filter tree
         mergeFilter(root, parts);
-    #endif
-
-
     }
 };
 
@@ -516,10 +444,10 @@ public:
         MRDOX_ASSERT(context_.getTraversalScope() ==
             std::vector<Decl*>{context_.getTranslationUnitDecl()});
 
-        for(std::string_view ns : config->filters.deny.namespaces)
+        for(std::string_view ns : config->filters.deny.symbols)
             symbolFilter_.addFilter(ns, false);
-        for(std::string_view ns : config->filters.allow.namespaces)
-            symbolFilter_.addFilter(ns, true);
+        // for(std::string_view ns : config->filters.allow.symbols)
+        //     symbolFilter_.addFilter(ns, true);
 
     }
 
@@ -1723,12 +1651,14 @@ public:
         if(ND && ! forceExtract_ && ! symbolFilter_.detached)
         {
             std::string name = extractName(ND);
-            // if the name of this namespace matches a child
-            // of the current filter node, then this namespace may
-            // be blacklisted or may contain a blacklisted namespace
             if(FilterNode* child = symbolFilter_.current->findChild(name))
             {
-                if(! child->Allowed && ! child->ChildrenAllowed)
+                // if(! child->Allowed)
+                //     return false;
+
+                // KRYSTIAN NOTE: for the blacklist only implementation,
+                // a match with a terminal node means that node is blacklisted
+                if(child->isTerminal())
                     return false;
 
                 symbolFilter_.current = child;
@@ -1736,9 +1666,8 @@ public:
             }
             else
             {
-                if(! symbolFilter_.current->Allowed ||
-                    ! symbolFilter_.current->ChildrenAllowed)
-                    return false;
+                // if(! symbolFilter_.current->Allowed)
+                //     return false;
                 if(const auto* DC = dyn_cast<DeclContext>(D);
                     ! DC || ! DC->isInlineNamespace())
                 {
@@ -1746,44 +1675,9 @@ public:
                     // of the current filter node, set the detached flag
                     // so we don't update the namespace filter state
                     // while traversing the children of this namespace
-                    // symbolFilter_.detached = true;
-                    symbolFilter_.detached = symbolFilter_.current->isTerminal();
+                    symbolFilter_.detached = true;
                 }
             }
-
-            #if 0
-            if(! symbolFilter_.current->Allowed && ! child)
-                return false;
-            if(symbolFilter_.current->ChildrenAllowed && )
-            if()
-            {
-                #if 0
-                // if the node is terminal (i.e. has no children),
-                // it means the namespace is blacklisted
-                if(child->isTerminal())
-                    return false;
-                #else
-                if(! child->shouldEnter())
-                    return false;
-                #endif
-                // otherwise, update the current node
-                symbolFilter_.current = child;
-                symbolFilter_.detached = false;
-            }
-            // if we are entering an inline namespace that does not
-            // match any child nodes, the deattached flag is not set
-            // because inline namespace members can be named as-if they
-            // are members of the innermost enclosing non-inline namespace
-            else if(const auto* DC = dyn_cast<DeclContext>(D);
-                ! DC || ! DC->isInlineNamespace())
-            {
-                // if this namespace does not match a child
-                // of the current filter node, set the detached flag
-                // so we don't update the namespace filter state
-                // while traversing the children of this namespace
-                symbolFilter_.detached = true;
-            }
-            #endif
         }
 
         // skip system header

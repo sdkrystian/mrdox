@@ -147,13 +147,12 @@
     </Type>
     <Type Name="clang::mrdox::FilterNode">
         <Intrinsic Name="n_children" Expression="(size_t)(Children._Mypair._Myval2._Mylast - Children._Mypair._Myval2._Myfirst)" />
-        <DisplayString Condition="n_children() == 1">Allowed = {int(Allowed)}, ChildrenAllowed = {int(ChildrenAllowed)}, {n_children()} child, Pattern = {Pattern}</DisplayString>
-        <DisplayString Condition="n_children() != 0">Allowed = {int(Allowed)}, ChildrenAllowed = {int(ChildrenAllowed)}, {n_children()} children, Pattern = {Pattern}</DisplayString>
-        <DisplayString>Allowed = {int(Allowed)}, ChildrenAllowed = {int(ChildrenAllowed)}, Pattern = {Pattern}</DisplayString>
+        <DisplayString Condition="n_children() == 1">Allowed = {int(Allowed)}, {n_children()} child, Pattern = {Pattern}</DisplayString>
+        <DisplayString Condition="n_children() != 0">Allowed = {int(Allowed)}, {n_children()} children, Pattern = {Pattern}</DisplayString>
+        <DisplayString>Allowed = {int(Allowed)}, Pattern = {Pattern}</DisplayString>
         <Expand>
             <Item Name="Pattern">Pattern</Item>
             <Item Name="Allowed">Allowed</Item>
-            <Item Name="ChildrenAllowed">ChildrenAllowed</Item>
             <Synthetic Name="Children" Condition="n_children() != 0">
                 <DisplayString>{Children._Mypair._Myval2._Myfirst,[n_children()]na}</DisplayString>
                 <Expand>

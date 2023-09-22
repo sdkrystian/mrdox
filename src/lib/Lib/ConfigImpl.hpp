@@ -39,7 +39,7 @@ public:
         {
             struct FilterList
             {
-                std::vector<std::string> namespaces;
+                std::vector<std::string> symbols;
             };
 
             FilterList allow;

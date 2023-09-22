@@ -46,7 +46,7 @@ struct llvm::yaml::MappingTraits<
     static void mapping(IO &io,
         clang::mrdox::ConfigImpl::SettingsImpl::FilterConfig::FilterList& f)
     {
-        io.mapOptional("namespaces", f.namespaces);
+        io.mapOptional("symbols", f.symbols);
     }
 };
 
