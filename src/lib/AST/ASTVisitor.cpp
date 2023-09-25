@@ -302,25 +302,11 @@ struct FilterNode
         FilterNode* matching_node = nullptr;
         for(FilterNode& child : Children)
         {
-
-            #if 0
-                // KRYSTIAN NOTE: this is a hack for the blacklist-only
-                // implementation. we don't want to increase the depth of
-                // existing terminal nodes
-                if(pattern.subsumes(child.Pattern))
-                {
-                    if(! child.isTerminal())
-                        child.mergePattern(parts, excluded);
-                    else
-                        continue;
-                }
-            #else
-                // if the new pattern would match everything
-                // that the child node would, merge the subsequent
-                // patterns into the child node
-                if(pattern.subsumes(child.Pattern))
-                    child.mergePattern(parts, excluded);
-            #endif
+            // if the new pattern would match everything
+            // that the child node would, merge the subsequent
+            // patterns into the child node
+            if(pattern.subsumes(child.Pattern))
+                child.mergePattern(parts, excluded);
 
             // found_exact |= child.Pattern == pattern;
             if(child.Pattern == pattern)
@@ -349,12 +335,6 @@ struct FilterNode
             // whitelist overrides blacklist
             matching_node->Excluded &= excluded;
         }
-        #if 0
-        else if(matching_node->Excluded != excluded)
-        {
-
-        }
-        #endif
     }
 
     void
@@ -396,17 +376,7 @@ public:
 
     SymbolFilter() = default;
     SymbolFilter(const SymbolFilter&) = delete;
-
-    #if 1
-        SymbolFilter& operator=(SymbolFilter&& other)
-        {
-            root = std::move(other.root);
-            detached = other.detached;
-            return *this;
-        }
-    #else
-        SymbolFilter(SymbolFilter&&) = delete;
-    #endif
+    SymbolFilter(SymbolFilter&&) = delete;
 
     void
     addFilter(
@@ -532,21 +502,11 @@ public:
         MRDOX_ASSERT(context_.getTraversalScope() ==
             std::vector<Decl*>{context_.getTranslationUnitDecl()});
 
-        #if 0
-            for(std::string_view pattern : config->filters.exclude.symbols)
-                symbolFilter_.addFilter(pattern, true);
-            // for(std::string_view pattern : config->filters.include.symbols)
-            //     symbolFilter_.addFilter(pattern, false);
-        #else
-            SymbolFilter filter;
-            for(std::string_view pattern : config->filters.exclude.symbols)
-                filter.addFilter(pattern, true);
-            for(std::string_view pattern : config->filters.include.symbols)
-                filter.addFilter(pattern, false);
-            filter.root.finalize(false, false, false);
-            symbolFilter_ = std::move(filter);
-        #endif
-
+        for(std::string_view pattern : config->filters.exclude.symbols)
+            symbolFilter_.addFilter(pattern, true);
+        for(std::string_view pattern : config->filters.include.symbols)
+            symbolFilter_.addFilter(pattern, false);
+        symbolFilter_.root.finalize(false, false, false);
     }
 
     auto& results()
