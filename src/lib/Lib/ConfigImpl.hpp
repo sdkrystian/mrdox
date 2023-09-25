@@ -42,8 +42,8 @@ public:
                 std::vector<std::string> symbols;
             };
 
-            FilterList allow;
-            FilterList deny;
+            FilterList include;
+            FilterList exclude;
         };
 
         /** Additional defines passed to the compiler.

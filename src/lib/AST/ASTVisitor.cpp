@@ -97,7 +97,7 @@ struct InfoPtrEqual
 }
 
 //------------------------------------------------
-class IdentifierPattern
+class FilterPattern
 {
     // pattern without any wildcards
     std::string raw_;
@@ -111,27 +111,27 @@ class IdentifierPattern
         std::span<const std::size_t> parts) const;
 
 public:
-    IdentifierPattern();
-    IdentifierPattern(std::string_view pattern);
+    FilterPattern();
+    FilterPattern(std::string_view pattern);
 
     bool
-    operator==(const IdentifierPattern&) const noexcept = default;
+    operator==(const FilterPattern&) const noexcept = default;
 
     bool
     matches(std::string_view str) const;
 
     bool
-    subsumes(const IdentifierPattern& other) const;
+    subsumes(const FilterPattern& other) const;
 };
 
-IdentifierPattern::
-IdentifierPattern()
+FilterPattern::
+FilterPattern()
     : parts_(1, 0)
 {
 }
 
-IdentifierPattern::
-IdentifierPattern(
+FilterPattern::
+FilterPattern(
     std::string_view pattern)
 {
     if(pattern.empty())
@@ -156,7 +156,7 @@ IdentifierPattern(
 }
 
 bool
-IdentifierPattern::
+FilterPattern::
 matchesSlow(
     std::string_view str,
     std::string_view pattern,
@@ -196,7 +196,7 @@ matchesSlow(
 }
 
 bool
-IdentifierPattern::
+FilterPattern::
 matches(std::string_view str) const
 {
     if(parts_.size() == 1)
@@ -216,27 +216,29 @@ matches(std::string_view str) const
 }
 
 bool
-IdentifierPattern::
-subsumes(const IdentifierPattern& other) const
+FilterPattern::
+subsumes(const FilterPattern& other) const
 {
     return matches(other.raw_);
 }
 
 struct FilterNode
 {
-    IdentifierPattern Pattern;
+    FilterPattern Pattern;
     std::vector<FilterNode> Children;
     // KRYSTIAN NOTE: unused in the blacklist only
     // implementation.
-    bool Allowed : 1 = false;
+    bool Excluded : 1 = true;
 
     FilterNode() = default;
 
     FilterNode(
-        const IdentifierPattern& pattern,
-        bool allowed)
+        const FilterPattern& pattern,
+        std::vector<FilterNode>&& children,
+        bool excluded)
         : Pattern(pattern)
-        , Allowed(allowed)
+        , Children(std::move(children))
+        , Excluded(excluded)
     {
     }
 
@@ -259,13 +261,105 @@ struct FilterNode
         }
         return best;
     }
+
+    void
+    mergePattern(
+        std::span<FilterPattern> parts,
+        bool excluded)
+    {
+        if(parts.empty())
+            return;
+
+        const auto& pattern = parts[0];
+        parts = parts.subspan(1);
+
+        std::vector<FilterNode> subsumed;
+        bool found_exact = false;
+        for(FilterNode& child : Children)
+        {
+
+            #if 1
+                // KRYSTIAN NOTE: this is a hack for the blacklist-only
+                // implementation. we don't want to increase the depth of
+                // existing terminal nodes
+                if(pattern.subsumes(child.Pattern))
+                {
+                    if(! child.isTerminal())
+                        child.mergePattern(parts, excluded);
+                    else
+                        continue;
+                }
+            #else
+                // if the new pattern would match everything
+                // that the child node would, merge the subsequent
+                // patterns into the child node
+                if(pattern.subsumes(child.Pattern))
+                    child.mergePattern(parts);
+            #endif
+
+            found_exact |= child.Pattern == pattern;
+            // if an exact match has not been found, collect the
+            // existing children which would match this pattern
+            if(! found_exact && child.Pattern.subsumes(pattern))
+            {
+                subsumed.insert(subsumed.end(),
+                    child.Children.begin(),
+                    child.Children.end());
+            }
+        }
+        // if we didn't find an exact match, add a new node
+        if(! found_exact)
+        {
+            FilterNode& node = Children.emplace_back(
+                pattern, std::move(subsumed), excluded);
+            node.mergePattern(parts, excluded);
+        }
+    }
 };
 
-struct SymbolFilter
+class SymbolFilter
 {
+public:
     FilterNode root;
     FilterNode* current = &root;
     bool detached = false;
+
+    SymbolFilter() = default;
+    SymbolFilter(const SymbolFilter&) = delete;
+
+    #if 1
+        SymbolFilter& operator=(SymbolFilter&& other)
+        {
+            root = std::move(other.root);
+            detached = other.detached;
+            return *this;
+        }
+    #else
+        SymbolFilter(SymbolFilter&&) = delete;
+    #endif
+
+    void
+    addFilter(
+        std::string_view str,
+        bool excluded)
+    {
+        // FIXME: this does not handle invalid qualified-ids
+        std::vector<FilterPattern> parts;
+        if(str.starts_with("::"))
+            str.remove_prefix(2);
+        do
+        {
+            std::size_t idx = str.find("::");
+            parts.emplace_back(str.substr(0, idx));
+            if(idx == std::string_view::npos)
+                break;
+            str.remove_prefix(idx + 2);
+        }
+        while(! str.empty());
+        // merge the parsed patterns into the filter tree
+        // mergeFilter(root, parts);
+        root.mergePattern(parts, excluded);
+    }
 
     class FilterScope
     {
@@ -287,82 +381,6 @@ struct SymbolFilter
             filter_.detached = detached_prev_;
         }
     };
-
-    void
-    mergeFilter(
-        FilterNode& node,
-        std::span<IdentifierPattern> parts)
-    {
-        if(parts.empty())
-            return;
-
-        const auto& pattern = parts[0];
-        parts = parts.subspan(1);
-
-        std::vector<FilterNode> inherited;
-        bool exact_match = false;
-        for(FilterNode& child : node.Children)
-        {
-
-            #if 1
-                // KRYSTIAN NOTE: this is a hack for the blacklist-only
-                // implementation. we don't want to increase the depth of
-                // existing terminal nodes
-                if(pattern.subsumes(child.Pattern))
-                {
-                    if(&child == &root || ! child.isTerminal())
-                        mergeFilter(child, parts);
-                    else
-                        continue;
-                }
-            #else
-                // if the new pattern would match everything
-                // that the child node would, merge the subsequent
-                // patterns into the child node
-                if(pattern.subsumes(child.Pattern))
-                    mergeFilter(child, parts);
-            #endif
-
-            exact_match |= child.Pattern == pattern;
-            // if an exact match has not been found, collect the
-            // existing children which would match this pattern
-            if(! exact_match && child.Pattern.subsumes(pattern))
-            {
-                inherited.insert(inherited.end(),
-                    child.Children.begin(),
-                    child.Children.end());
-            }
-        }
-        // if we didn't find an exact match, add a new node
-        if(! exact_match)
-        {
-            auto& child = node.Children.emplace_back(pattern, false);
-            child.Children = std::move(inherited);
-            mergeFilter(child, parts);
-        }
-    }
-
-    void
-    addFilter(
-        std::string_view str,
-        bool allowed)
-    {
-        // FIXME: this does not handle invalid qualified-ids
-        std::vector<IdentifierPattern> parts;
-        if(str.starts_with("::"))
-            str.remove_prefix(2);
-        do
-        {
-            std::size_t idx = str.find("::");
-            parts.emplace_back(str.substr(0, idx));
-            if(idx == std::string_view::npos)
-                break;
-            str.remove_prefix(idx + 2);
-        }
-        while(! str.empty());
-        // merge the parsed patterns into the filter tree
-        mergeFilter(root, parts);
-    }
 };
 
 namespace {
@@ -444,10 +462,19 @@ public:
         MRDOX_ASSERT(context_.getTraversalScope() ==
             std::vector<Decl*>{context_.getTranslationUnitDecl()});
 
-        for(std::string_view ns : config->filters.deny.symbols)
-            symbolFilter_.addFilter(ns, false);
-        // for(std::string_view ns : config->filters.allow.symbols)
-        //     symbolFilter_.addFilter(ns, true);
+        #if 0
+            for(std::string_view ns : config->filters.exclude.symbols)
+                symbolFilter_.addFilter(ns, false);
+            // for(std::string_view ns : config->filters.include.symbols)
+            //     symbolFilter_.addFilter(ns, true);
+        #else
+            SymbolFilter filter;
+            for(std::string_view ns : config->filters.exclude.symbols)
+                filter.addFilter(ns, false);
+            // for(std::string_view ns : config->filters.include.symbols)
+            //     filter.addFilter(ns, true);
+            symbolFilter_ = std::move(filter);
+        #endif
 
     }
 
@@ -1653,7 +1680,7 @@ public:
             std::string name = extractName(ND);
             if(FilterNode* child = symbolFilter_.current->findChild(name))
             {
-                // if(! child->Allowed)
+                // if(child->Excluded)
                 //     return false;
 
                 // KRYSTIAN NOTE: for the blacklist only implementation,
@@ -1666,7 +1693,7 @@ public:
             }
             else
             {
-                // if(! symbolFilter_.current->Allowed)
+                // if(symbolFilter_.current->Excluded)
                 //     return false;
                 if(const auto* DC = dyn_cast<DeclContext>(D);
                     ! DC || ! DC->isInlineNamespace())

@@ -57,8 +57,8 @@ struct llvm::yaml::MappingTraits<
     static void mapping(IO &io,
         clang::mrdox::ConfigImpl::SettingsImpl::FilterConfig& f)
     {
-        io.mapOptional("allow", f.allow);
-        io.mapOptional("deny", f.deny);
+        io.mapOptional("include", f.include);
+        io.mapOptional("exclude", f.exclude);
     }
 };
 
