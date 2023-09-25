@@ -111,7 +111,7 @@ class FilterPattern
         std::span<const std::size_t> parts) const;
 
 public:
-    FilterPattern();
+    FilterPattern() = default;
     FilterPattern(std::string_view pattern);
 
     bool
@@ -125,34 +125,29 @@ public:
 };
 
 FilterPattern::
-FilterPattern()
-    : parts_(1, 0)
-{
-}
-
-FilterPattern::
 FilterPattern(
     std::string_view pattern)
 {
-    if(pattern.empty())
-        return;
-    const auto last = pattern.end();
-    auto first = pattern.begin();
-    auto part_first = first;
-    bool wildcard = *first == '*';
-    do
+    while(! pattern.empty())
     {
-        if(++first != last && wildcard == (*first == '*'))
-            continue;
-        std::string_view part(part_first,
-            wildcard ? part_first : first);
-        raw_.append(part);
-        parts_.emplace_back(part.size());
+        bool wildcard = pattern.front() == '*';
+        std::size_t part_size = std::min(
+            pattern.size(), wildcard ?
+                pattern.find_first_not_of('*') :
+                pattern.find('*'));
 
-        wildcard = ! wildcard;
-        part_first = first;
+        if(! wildcard)
+            raw_.append(pattern.substr(0, part_size));
+
+        pattern.remove_prefix(part_size);
+
+        // don't store the parts for patterns without
+        // wildcards, as well as wildcard only patterns
+        if(pattern.empty() && parts_.empty())
+            return;
+
+        parts_.push_back(wildcard ? 0 : part_size);
     }
-    while(first != last);
 }
 
 bool
@@ -199,12 +194,14 @@ bool
 FilterPattern::
 matches(std::string_view str) const
 {
-    if(parts_.size() == 1)
+    if(parts_.empty())
     {
-        // pattern is just '*', match everything
-        if(! parts_[0])
+        // if the raw pattern is empty, the pattern is '*'
+        // and matches everything
+        if(raw_.empty())
             return true;
-        // pattern has no wildcards
+        // the pattern contains no wildcards, compare with
+        // the raw pattern
         return str == raw_;
     }
     // no match when the string is shorter than
@@ -464,15 +461,15 @@ public:
 
         #if 0
             for(std::string_view ns : config->filters.exclude.symbols)
-                symbolFilter_.addFilter(ns, false);
+                symbolFilter_.addFilter(ns, true);
             // for(std::string_view ns : config->filters.include.symbols)
-            //     symbolFilter_.addFilter(ns, true);
+            //     symbolFilter_.addFilter(ns, false);
         #else
             SymbolFilter filter;
             for(std::string_view ns : config->filters.exclude.symbols)
-                filter.addFilter(ns, false);
+                filter.addFilter(ns, true);
             // for(std::string_view ns : config->filters.include.symbols)
-            //     filter.addFilter(ns, true);
+            //     filter.addFilter(ns, false);
             symbolFilter_ = std::move(filter);
         #endif
 
