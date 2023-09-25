@@ -104,6 +104,10 @@ class FilterPattern
     // pattern part lengths, where zero represents a wildcard
     std::vector<std::size_t> parts_;
 
+#ifndef NDEBUG
+    std::string pattern_ = "*";
+#endif
+
     bool
     matchesSlow(
         std::string_view str,
@@ -137,17 +141,40 @@ FilterPattern(
                 pattern.find('*'));
 
         if(! wildcard)
-            raw_.append(pattern.substr(0, part_size));
+            raw_.append(pattern, 0, part_size);
 
         pattern.remove_prefix(part_size);
 
         // don't store the parts for patterns without
         // wildcards, as well as wildcard only patterns
         if(pattern.empty() && parts_.empty())
-            return;
+            break;
 
         parts_.push_back(wildcard ? 0 : part_size);
     }
+
+#ifndef NDEBUG
+    pattern_.clear();
+    if(parts_.empty())
+    {
+        if(raw_.empty())
+            pattern_ = "*";
+        else
+            pattern_ = raw_;
+    }
+    else
+    {
+        const char* first = raw_.data();
+        for(std::size_t part_size : parts_)
+        {
+            if(part_size)
+                pattern_.append(first, part_size);
+            else
+                pattern_.push_back('*');
+            first += part_size;
+        }
+    }
+#endif
 }
 
 bool
@@ -226,6 +253,7 @@ struct FilterNode
     // KRYSTIAN NOTE: unused in the blacklist only
     // implementation.
     bool Excluded : 1 = true;
+    bool Explicit : 1 = false;
 
     FilterNode() = default;
 
@@ -271,11 +299,11 @@ struct FilterNode
         parts = parts.subspan(1);
 
         std::vector<FilterNode> subsumed;
-        bool found_exact = false;
+        FilterNode* matching_node = nullptr;
         for(FilterNode& child : Children)
         {
 
-            #if 1
+            #if 0
                 // KRYSTIAN NOTE: this is a hack for the blacklist-only
                 // implementation. we don't want to increase the depth of
                 // existing terminal nodes
@@ -291,13 +319,15 @@ struct FilterNode
                 // that the child node would, merge the subsequent
                 // patterns into the child node
                 if(pattern.subsumes(child.Pattern))
-                    child.mergePattern(parts);
+                    child.mergePattern(parts, excluded);
             #endif
 
-            found_exact |= child.Pattern == pattern;
+            // found_exact |= child.Pattern == pattern;
+            if(child.Pattern == pattern)
+                matching_node = &child;
             // if an exact match has not been found, collect the
             // existing children which would match this pattern
-            if(! found_exact && child.Pattern.subsumes(pattern))
+            if(! matching_node && child.Pattern.subsumes(pattern))
             {
                 subsumed.insert(subsumed.end(),
                     child.Children.begin(),
@@ -305,12 +335,55 @@ struct FilterNode
             }
         }
         // if we didn't find an exact match, add a new node
-        if(! found_exact)
+        if(! matching_node)
         {
-            FilterNode& node = Children.emplace_back(
+            matching_node = &Children.emplace_back(
                 pattern, std::move(subsumed), excluded);
-            node.mergePattern(parts, excluded);
+            matching_node->mergePattern(parts, excluded);
         }
+
+        if(parts.empty())
+        {
+            // mark terminal nodes are explicitly specified
+            matching_node->Explicit = true;
+            // whitelist overrides blacklist
+            matching_node->Excluded &= excluded;
+        }
+        #if 0
+        else if(matching_node->Excluded != excluded)
+        {
+
+        }
+        #endif
+    }
+
+    void
+    finalize(
+        bool any_parent_explicit,
+        bool any_parent_excluded,
+        bool any_parent_included)
+    {
+        any_parent_explicit |= Explicit;
+        any_parent_excluded |= (Excluded && Explicit);
+        any_parent_included |= (! Excluded && Explicit);
+
+        for(FilterNode& child : Children)
+            child.finalize(
+                any_parent_explicit,
+                any_parent_excluded,
+                any_parent_included);
+
+        std::erase_if(Children, [&](const auto& child) -> bool
+            {
+                if(! child.Children.empty())
+                    return false;
+                if(! (any_parent_excluded || child.Excluded))
+                    return true;
+                if(! (any_parent_included || ! child.Excluded) &&
+                    any_parent_explicit)
+                    return true;
+                return false;
+            });
     }
 };
 
@@ -460,16 +533,17 @@ public:
             std::vector<Decl*>{context_.getTranslationUnitDecl()});
 
         #if 0
-            for(std::string_view ns : config->filters.exclude.symbols)
-                symbolFilter_.addFilter(ns, true);
-            // for(std::string_view ns : config->filters.include.symbols)
-            //     symbolFilter_.addFilter(ns, false);
+            for(std::string_view pattern : config->filters.exclude.symbols)
+                symbolFilter_.addFilter(pattern, true);
+            // for(std::string_view pattern : config->filters.include.symbols)
+            //     symbolFilter_.addFilter(pattern, false);
         #else
             SymbolFilter filter;
-            for(std::string_view ns : config->filters.exclude.symbols)
-                filter.addFilter(ns, true);
-            // for(std::string_view ns : config->filters.include.symbols)
-            //     filter.addFilter(ns, false);
+            for(std::string_view pattern : config->filters.exclude.symbols)
+                filter.addFilter(pattern, true);
+            for(std::string_view pattern : config->filters.include.symbols)
+                filter.addFilter(pattern, false);
+            filter.root.finalize(false, false, false);
             symbolFilter_ = std::move(filter);
         #endif
 
@@ -1664,6 +1738,50 @@ public:
 
     //------------------------------------------------
 
+    bool
+    checkSymbolFilter(const NamedDecl* ND)
+    {
+        if(forceExtract_ || symbolFilter_.detached)
+            return true;
+
+        std::string name = extractName(ND);
+        FilterNode* parent = symbolFilter_.current;
+        if(FilterNode* child = parent->findChild(name))
+        {
+            #if 1
+                if(child->Explicit && child->Excluded &&
+                    child->isTerminal())
+                    return false;
+            #else
+                // KRYSTIAN NOTE: for the blacklist only implementation,
+                // a match with a terminal node means that node is blacklisted
+                if(child->isTerminal())
+                    return false;
+            #endif
+
+            symbolFilter_.current = child;
+            symbolFilter_.detached = false;
+        }
+        else
+        {
+            #if 1
+                if(parent->Explicit && parent->Excluded)
+                    return false;
+            #endif
+
+            if(const auto* DC = dyn_cast<DeclContext>(ND);
+                ! DC || ! DC->isInlineNamespace())
+            {
+                // if this namespace does not match a child
+                // of the current filter node, set the detached flag
+                // so we don't update the namespace filter state
+                // while traversing the children of this namespace
+                symbolFilter_.detached = true;
+            }
+        }
+        return true;
+    }
+
     // This also sets IsFileInRootDir
     bool
     shouldExtract(
@@ -1671,37 +1789,46 @@ public:
     {
         namespace path = llvm::sys::path;
 
-        const auto* ND = dyn_cast<NamedDecl>(D);
-        if(ND && ! forceExtract_ && ! symbolFilter_.detached)
+        if(const auto* ND = dyn_cast<NamedDecl>(D))
         {
-            std::string name = extractName(ND);
-            if(FilterNode* child = symbolFilter_.current->findChild(name))
+            // out-of-line declarations require us to rebuild
+            // the symbol filtering state
+            if(ND->isOutOfLine())
             {
-                // if(child->Excluded)
-                //     return false;
-
-                // KRYSTIAN NOTE: for the blacklist only implementation,
-                // a match with a terminal node means that node is blacklisted
-                if(child->isTerminal())
-                    return false;
-
-                symbolFilter_.current = child;
+                symbolFilter_.current = &symbolFilter_.root;
                 symbolFilter_.detached = false;
-            }
-            else
-            {
-                // if(symbolFilter_.current->Excluded)
-                //     return false;
-                if(const auto* DC = dyn_cast<DeclContext>(D);
-                    ! DC || ! DC->isInlineNamespace())
+
+                // collect all parent classes/enums/namespaces
+                llvm::SmallVector<const NamedDecl*, 8> parents;
+                const DeclContext* parent = ND->getDeclContext();
+                do
                 {
-                    // if this namespace does not match a child
-                    // of the current filter node, set the detached flag
-                    // so we don't update the namespace filter state
-                    // while traversing the children of this namespace
-                    symbolFilter_.detached = true;
+                    switch(parent->getDeclKind())
+                    {
+                    case Decl::Namespace:
+                    case Decl::Enum:
+                    case Decl::CXXRecord:
+                    case Decl::ClassTemplateSpecialization:
+                    case Decl::ClassTemplatePartialSpecialization:
+                        parents.push_back(cast<NamedDecl>(parent));
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                while(parent = parent->getParent());
+
+                // check whether each parent passes the symbol filters
+                // as-if the declaration was inline
+                for(const auto* PND : std::views::reverse(parents))
+                {
+                    if(! checkSymbolFilter(PND))
+                        return false;
                 }
             }
+
+            if(! checkSymbolFilter(ND))
+                return false;
         }
 
         // skip system header
