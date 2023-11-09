@@ -64,11 +64,6 @@ private:
 
 //------------------------------------------------
 
-// Converters for attributes
-std::string toString(SymbolID const& id);
-
-//------------------------------------------------
-
 /** A single XML attribute.
 */
 struct Attribute
@@ -90,7 +85,7 @@ struct Attribute
     Attribute(
         SymbolID id)
         : name("id")
-        , value(toString(id))
+        , value(toString(id, 64))
         , pred(id != SymbolID::invalid)
     {
     }

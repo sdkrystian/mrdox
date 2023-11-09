@@ -41,7 +41,7 @@ format(
 {
     std::string str = s ?
         "<invalid SymbolID>" :
-        clang::mrdocs::toBase64(s);
+        clang::mrdocs::toString(s, 64);
     return fmt::formatter<std::string>::format(std::move(str), ctx);
 }
 

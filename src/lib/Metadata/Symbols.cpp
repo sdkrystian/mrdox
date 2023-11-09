@@ -15,6 +15,14 @@
 namespace clang {
 namespace mrdocs {
 
+#if 0
+/** Symbol ID of the global namespace.
+*/
+const SymbolID SymbolID::global =
+    "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
+    "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF";
+#endif
+
 // Better have 8 bits per byte, otherwise
 // we are going to be having some problems...
 static_assert(CHAR_BIT == 8);

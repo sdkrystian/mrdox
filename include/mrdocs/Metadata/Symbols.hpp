@@ -17,11 +17,14 @@
 #include <mrdocs/ADT/Optional.hpp>
 #include <cstdint>
 #include <cstring>
+#include <span>
 #include <compare>
 #include <string_view>
 
 namespace clang {
 namespace mrdocs {
+
+struct Info;
 
 /** A unique identifier for a symbol.
 
@@ -33,64 +36,40 @@ class SymbolID
 {
 public:
     static const SymbolID invalid;
-    static const SymbolID global;
 
-    using value_type = std::uint8_t;
+    constexpr SymbolID() noexcept = default;
 
-    constexpr SymbolID() = default;
+    std::span<const std::uint8_t, 20>
+    value() const noexcept;
 
-    template<typename Elem>
-    constexpr SymbolID(const Elem* src)
-    {
-        for(auto& c : data_)
-            c = *src++;
-    }
-
-    explicit operator bool() const noexcept
+    constexpr bool valid() const noexcept
     {
         return *this != SymbolID::invalid;
     }
 
-    constexpr auto data() const noexcept
+    constexpr explicit operator bool() const noexcept
     {
-        return data_;
+        return valid();
     }
 
-    constexpr std::size_t size() const noexcept
-    {
-        return 20;
-    }
+    const Info& operator*() const noexcept;
 
-    constexpr auto begin() const noexcept
-    {
-        return data_;
-    }
+    const Info* operator->() const noexcept;
 
-    constexpr auto end() const noexcept
-    {
-        return data_ + size();
-    }
-
-    operator std::string_view() const noexcept
-    {
-        return std::string_view(reinterpret_cast<
-            const char*>(data()), size());
-    }
-
-    auto operator<=>(
-        const SymbolID& other) const noexcept
-    {
-        return std::memcmp(
-            data(),
-            other.data(),
-            size()) <=> 0;
-    }
-
-    bool operator==(
-        const SymbolID& other) const noexcept = default;
+    constexpr bool operator==(
+        const SymbolID&) const noexcept = default;
 
 private:
-    value_type data_[20];
+    friend std::hash<SymbolID>;
+
+    struct Impl;
+
+    constexpr SymbolID(const Impl* impl) noexcept
+        : impl_(impl)
+    {
+    }
+
+    const Impl* impl_ = nullptr;
 };
 
 /** The invalid Symbol ID.
@@ -99,11 +78,13 @@ private:
 // to be an inline variable without it (it should; see [dcl.constexpr])
 constexpr inline SymbolID SymbolID::invalid = SymbolID();
 
-/** Symbol ID of the global namespace.
-*/
-constexpr inline SymbolID SymbolID::global =
-    "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
-    "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF";
+MRDOCS_DECL
+std::string
+toString(
+    SymbolID id,
+    unsigned radix,
+    bool lowercase = false);
+
 
 /** Return the result of comparing s0 to s1.
 
@@ -126,12 +107,15 @@ compareSymbolNames(
 template<>
 struct std::hash<clang::mrdocs::SymbolID>
 {
-    std::size_t operator()(
-        const clang::mrdocs::SymbolID& id) const
+    std::size_t operator()(const clang::mrdocs::SymbolID& id) const
     {
-        return std::hash<std::string_view>()(
-            std::string_view(id));
+        using SymbolID = clang::mrdocs::SymbolID;
+        return std::hash<const SymbolID::Impl*>()(id.impl_);
+        // return std::hash<std::string_view>()(
+        //     std::string_view(id));
     }
+    #if 0
+    #endif
 };
 
 #endif

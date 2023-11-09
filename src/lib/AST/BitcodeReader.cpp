@@ -46,7 +46,7 @@ getInfos()
         // Top level Version is first
         case BI_VERSION_BLOCK_ID:
         {
-            VersionBlock B;
+            VersionBlock B(*this);
             if (auto err = readBlock(B, ID))
                 return Unexpected(std::move(err));
             continue;
@@ -236,10 +236,10 @@ readBlock(
 
 // Calls readBlock to read each block in the given bitcode.
 mrdocs::Expected<std::vector<std::unique_ptr<Info>>>
-readBitcode(llvm::StringRef bitcode)
+readBitcode(llvm::StringRef bitcode, InfoContext& Context)
 {
     llvm::BitstreamCursor Stream(bitcode);
-    BitcodeReader reader(Stream);
+    BitcodeReader reader(Stream, Context);
     return reader.getInfos();
 }
 

@@ -129,6 +129,7 @@ public:
     SourceManager& source_;
     Sema& sema_;
 
+    InfoContext& info_context_;
     InfoSet info_;
     std::unordered_set<Decl*> dependencies_;
 
@@ -196,12 +197,14 @@ public:
     }
 
     ASTVisitor(
+        InfoContext& info_context,
         const ConfigImpl& config,
         Diagnostics& diags,
         CompilerInstance& compiler,
         ASTContext& context,
         Sema& sema) noexcept
-        : config_(config)
+        : info_context_(info_context)
+        , config_(config)
         , diags_(diags)
         , compiler_(compiler)
         , context_(context)
@@ -412,8 +415,10 @@ public:
         usr_.clear();
         if(generateUSR(D))
             return false;
-        id = SymbolID(llvm::SHA1::hash(
-            arrayRefFromStringRef(usr_)).data());
+        id = info_context_.getSymbolID(llvm::SHA1::hash(
+            arrayRefFromStringRef(usr_)));
+        // id = SymbolID(llvm::SHA1::hash(
+        //     arrayRefFromStringRef(usr_)).data());
         return true;
     }
 
@@ -1587,7 +1592,8 @@ public:
             // it uses SymbolID::global and should *always* exist
             case Decl::TranslationUnit:
             {
-                parent_id = SymbolID::global;
+                // parent_id = SymbolID::global;
+                parent_id = info_context_.globalNamespaceID();
                 auto [P, created] = getOrCreateInfo<
                     NamespaceInfo>(parent_id);
                 emplaceChild(P, child_id);
@@ -2779,6 +2785,7 @@ class ASTInstantiationCallbacks
 class ASTVisitorConsumer
     : public SemaConsumer
 {
+    InfoContext& info_context_;
     const ConfigImpl& config_;
     ExecutionContext& ex_;
     CompilerInstance& compiler_;
@@ -2829,6 +2836,7 @@ class ASTVisitorConsumer
             return;
 
         ASTVisitor visitor(
+            info_context_,
             config_,
             diags,
             compiler_,
@@ -2902,10 +2910,12 @@ class ASTVisitorConsumer
 
 public:
     ASTVisitorConsumer(
+        InfoContext& info_context,
         const ConfigImpl& config,
         ExecutionContext& ex,
         CompilerInstance& compiler) noexcept
-        : config_(config)
+        : info_context_(info_context)
+        , config_(config)
         , ex_(ex)
         , compiler_(compiler)
     {
@@ -2922,9 +2932,11 @@ struct ASTAction
     : public clang::ASTFrontendAction
 {
     ASTAction(
+        InfoContext& info_context,
         ExecutionContext& ex,
         ConfigImpl const& config) noexcept
-        : ex_(ex)
+        : info_context_(info_context)
+        , ex_(ex)
         , config_(config)
     {
     }
@@ -2951,10 +2963,11 @@ struct ASTAction
         llvm::StringRef InFile) override
     {
         return std::make_unique<ASTVisitorConsumer>(
-            config_, ex_, Compiler);
+            info_context_, config_, ex_, Compiler);
     }
 
 private:
+    InfoContext& info_context_;
     ExecutionContext& ex_;
     ConfigImpl const& config_;
 };
@@ -2965,9 +2978,11 @@ struct ASTActionFactory :
     tooling::FrontendActionFactory
 {
     ASTActionFactory(
+        InfoContext& info_context,
         ExecutionContext& ex,
         ConfigImpl const& config) noexcept
-        : ex_(ex)
+        : info_context_(info_context)
+        , ex_(ex)
         , config_(config)
     {
     }
@@ -2975,10 +2990,12 @@ struct ASTActionFactory :
     std::unique_ptr<FrontendAction>
     create() override
     {
-        return std::make_unique<ASTAction>(ex_, config_);
+        return std::make_unique<ASTAction>(
+            info_context_, ex_, config_);
     }
 
 private:
+    InfoContext& info_context_;
     ExecutionContext& ex_;
     ConfigImpl const& config_;
 };
@@ -2989,10 +3006,12 @@ private:
 
 std::unique_ptr<tooling::FrontendActionFactory>
 makeFrontendActionFactory(
+    InfoContext& info_context,
     ExecutionContext& ex,
     ConfigImpl const& config)
 {
-    return std::make_unique<ASTActionFactory>(ex, config);
+    return std::make_unique<ASTActionFactory>(
+        info_context, ex, config);
 }
 
 } // mrdocs

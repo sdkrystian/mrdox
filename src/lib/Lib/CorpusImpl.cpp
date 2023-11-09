@@ -23,24 +23,31 @@
 namespace clang {
 namespace mrdocs {
 
+InfoSet&
+CorpusImpl::
+info() const noexcept
+{
+    return info_context_.info();
+}
+
 auto
 CorpusImpl::
 begin() const noexcept ->
     iterator
 {
-    if(info_.empty())
+    if(info().empty())
         return end();
     // KRYSTIAN NOTE: this is far from ideal, but i'm not sure
     // to what extent implementation detail should be hidden.
-    return iterator(this, info_.begin()->get(),
+    return iterator(this, info().begin()->get(),
         [](const Corpus* corpus, const Info* val) ->
             const Info*
         {
             MRDOCS_ASSERT(val);
             const CorpusImpl* impl =
                 static_cast<const CorpusImpl*>(corpus);
-            auto it = impl->info_.find(val->id);
-            if(++it == impl->info_.end())
+            auto it = impl->info().find(val->id);
+            if(++it == impl->info().end())
                 return nullptr;
             return it->get();
         });
@@ -54,13 +61,25 @@ end() const noexcept ->
     return iterator();
 }
 
+const NamespaceInfo&
+CorpusImpl::
+globalNamespace() const noexcept
+{
+    const Info* I = find(
+        info_context_.globalNamespaceID());
+    // KRYSTIAN FIXME: is the correct? the global namespace
+    // may not exist if AST traversal failed
+    MRDOCS_ASSERT(I);
+    return static_cast<const NamespaceInfo&>(*I);
+}
+
 Info*
 CorpusImpl::
 find(
     SymbolID const& id) noexcept
 {
-    auto it = info_.find(id);
-    if(it != info_.end())
+    auto it = info().find(id);
+    if(it != info().end())
         return it->get();
     return nullptr;
 }
@@ -70,8 +89,8 @@ CorpusImpl::
 find(
     SymbolID const& id) const noexcept
 {
-    auto it = info_.find(id);
-    if(it != info_.end())
+    auto it = info().find(id);
+    if(it != info().end())
         return it->get();
     return nullptr;
 }
@@ -106,15 +125,18 @@ build(
     // This operation happens ona thread pool.
     report::print(reportLevel, "Extracting declarations");
 
-    #define USE_BITCODE
+    //#define USE_BITCODE
 
     #ifdef USE_BITCODE
-        BitcodeExecutionContext context(*config);
+        BitcodeExecutionContext context(
+            corpus->info_context_, *config);
     #else
-        InfoExecutionContext context(*config);
+        InfoExecutionContext context(
+            corpus->info_context_, *config);
     #endif
     std::unique_ptr<tooling::FrontendActionFactory> action =
-        makeFrontendActionFactory(context, *config);
+        makeFrontendActionFactory(
+            corpus->info_context_, context, *config);
     MRDOCS_ASSERT(action);
 
     // Get a copy of the filename strings
@@ -198,30 +220,40 @@ build(
         report::format(reportLevel,
             "Reducing declarations");
 
+        #if 0
         auto results = context.results();
         if(! results)
             return Unexpected(results.error());
         corpus->info_ = std::move(results.value());
+        #endif
+        if(auto err = context.finalize())
+            return Unexpected(err);
 
         report::format(reportLevel,
             "Reduced {} symbols in {}",
-                corpus->info_.size(),
+                corpus->info().size(),
                 format_duration(clock_type::now() - start_time));
     #else
+
+        #if 0
         auto results = context.results();
         if(! results)
             return Unexpected(results.error());
         corpus->info_ = std::move(results.value());
+        #endif
+
+        if(auto err = context.finalize())
+            return Unexpected(err);
 
         report::format(reportLevel,
             "Extracted {} declarations in {}",
-            corpus->info_.size(),
+            corpus->info().size(),
             format_duration(clock_type::now() - start_time));
     #endif
 
     auto lookup = std::make_unique<SymbolLookup>(*corpus);
 
-    finalize(corpus->info_, *lookup);
+    finalize(corpus->info_context_, *lookup);
     return corpus;
 }
 

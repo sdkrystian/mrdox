@@ -22,6 +22,7 @@ namespace mrdocs {
 inline
 Error
 decodeRecord(
+    BitcodeReader& br,
     Record const& R,
     bool& Field,
     llvm::StringRef Blob)
@@ -35,6 +36,7 @@ template<class IntTy>
 requires std::integral<IntTy>
 Error
 decodeRecord(
+    BitcodeReader& br,
     Record const& R,
     IntTy& v,
     llvm::StringRef Blob)
@@ -52,6 +54,7 @@ requires (std::integral<IntTy> &&
     sizeof(IntTy) > 4)
 Error
 decodeRecord(
+    BitcodeReader& br,
     Record const& R,
     IntTy& v,
     llvm::StringRef Blob)
@@ -67,13 +70,14 @@ template<class Enum>
 requires std::is_enum_v<Enum>
 Error
 decodeRecord(
+    BitcodeReader& br,
     Record const& R,
     Enum& value,
     llvm::StringRef blob)
 {
     static_assert(! std::same_as<Enum, InfoKind>);
     std::underlying_type_t<Enum> temp;
-    if(auto err = decodeRecord(R, temp, blob))
+    if(auto err = decodeRecord(br, R, temp, blob))
         return err;
     value = static_cast<Enum>(temp);
     return Error::success();
@@ -85,6 +89,7 @@ requires std::is_same_v<
     typename Field::value_type, char>
 Error
 decodeRecord(
+    BitcodeReader& br,
     const Record& R,
     Field& f,
     llvm::StringRef blob)
@@ -101,6 +106,7 @@ decodeRecord(
 inline
 Error
 decodeRecord(
+    BitcodeReader& br,
     Record const& R,
     std::vector<SymbolID>& f,
     llvm::StringRef blob)
@@ -109,31 +115,47 @@ decodeRecord(
     auto n = *src++;
     f.resize(n);
     auto* dest = &f[0];
+    #if 0
     while(n--)
     {
         *dest++ = SymbolID(src);
         src += BitCodeConstants::USRHashSize;
     }
+    #else
+    while(n--)
+    {
+        SymbolIDImpl::StorageType raw;
+        std::uninitialized_copy_n(
+            src, raw.size(), raw.data());
+        *dest++ = br.Context.getSymbolID(raw);
+        src += BitCodeConstants::USRHashSize;
+    }
+    #endif
     return Error::success();
 }
 
 inline
 Error
 decodeRecord(
+    BitcodeReader& br,
     const Record& R,
     SymbolID& Field,
     llvm::StringRef Blob)
 {
     if (R[0] != BitCodeConstants::USRHashSize)
         return formatError("USR digest size={}", R[0]);
-
-    Field = SymbolID(&R[1]);
+    SymbolIDImpl::StorageType raw;
+    std::uninitialized_copy_n(
+        &R[1], raw.size(), raw.data());
+    Field = br.Context.getSymbolID(raw);
+    // Field = SymbolID(&R[1]);
     return Error::success();
 }
 
 inline
 Error
 decodeRecord(
+    BitcodeReader& br,
     Record const& R,
     OptionalLocation& Field,
     llvm::StringRef Blob)
@@ -147,6 +169,7 @@ decodeRecord(
 inline
 Error
 decodeRecord(
+    BitcodeReader& br,
     const Record& R,
     std::vector<Location>& Field,
     llvm::StringRef Blob)
@@ -160,6 +183,7 @@ decodeRecord(
 inline
 Error
 decodeRecord(
+    BitcodeReader& br,
     Record const& R,
     std::initializer_list<BitFieldFullValue*> values,
     llvm::StringRef Blob)
@@ -209,7 +233,13 @@ struct BitcodeReader::AnyBlock
 class VersionBlock
     : public BitcodeReader::AnyBlock
 {
+    BitcodeReader& br_;
 public:
+    VersionBlock(BitcodeReader& br)
+        : br_(br)
+    {
+    }
+
     unsigned V;
 
     Error
@@ -219,7 +249,7 @@ public:
         switch(ID)
         {
         case VERSION:
-            if(auto err = decodeRecord(R, V, Blob))
+            if(auto err = decodeRecord(br_, R, V, Blob))
                 return err;
             if(V != BitcodeVersion)
                 return formatError("wrong ID for Version");
@@ -262,7 +292,7 @@ public:
         case JAVADOC_NODE_ADMONISH:
         {
             doc::Admonish admonish = doc::Admonish::none;
-            if(auto err = decodeRecord(R, admonish, Blob))
+            if(auto err = decodeRecord(br_, R, admonish, Blob))
                 return err;
             auto node = nodes.back().get();
             if(node->kind != doc::Kind::admonition)
@@ -274,7 +304,7 @@ public:
         case JAVADOC_NODE_PART:
         {
             doc::Parts parts = doc::Parts::all;
-            if(auto err = decodeRecord(R, parts, Blob))
+            if(auto err = decodeRecord(br_, R, parts, Blob))
                 return err;
             auto node = nodes.back().get();
             if(node->kind != doc::Kind::copied)
@@ -286,7 +316,7 @@ public:
         case JAVADOC_NODE_SYMBOLREF:
         {
             SymbolID id;
-            if(auto err = decodeRecord(R, id, Blob))
+            if(auto err = decodeRecord(br_, R, id, Blob))
                 return err;
             auto node = nodes.back().get();
             if(node->kind != doc::Kind::reference &&
@@ -300,7 +330,7 @@ public:
         {
             doc::ParamDirection direction =
                 doc::ParamDirection::none;
-            if(auto err = decodeRecord(R, direction, Blob))
+            if(auto err = decodeRecord(br_, R, direction, Blob))
                 return err;
             auto node = nodes.back().get();
             if(node->kind != doc::Kind::param)
@@ -326,7 +356,7 @@ public:
         case JAVADOC_NODE_KIND:
         {
             doc::Kind kind{};
-            if(auto err = decodeRecord(R, kind, Blob))
+            if(auto err = decodeRecord(br_, R, kind, Blob))
                 return err;
             switch(kind)
             {
@@ -410,7 +440,7 @@ public:
         case JAVADOC_NODE_STYLE:
         {
             doc::Style style = doc::Style::none;
-            if(auto err = decodeRecord(R, style, Blob))
+            if(auto err = decodeRecord(br_, R, style, Blob))
                 return err;
             auto node = nodes.back().get();
             if(node->kind != doc::Kind::styled)
@@ -524,19 +554,19 @@ public:
         case INFO_PART_ID:
         {
             SymbolID id = SymbolID::invalid;
-            if(auto err = decodeRecord(R, id, Blob))
+            if(auto err = decodeRecord(br_, R, id, Blob))
                 return err;
             I_ = std::make_unique<InfoTy>(id);
             return Error::success();
         }
         case INFO_PART_ACCESS:
-            return decodeRecord(R, I_->Access, Blob);
+            return decodeRecord(br_, R, I_->Access, Blob);
         case INFO_PART_IMPLICIT:
-            return decodeRecord(R, I_->Implicit, Blob);
+            return decodeRecord(br_, R, I_->Implicit, Blob);
         case INFO_PART_NAME:
-            return decodeRecord(R, I_->Name, Blob);
+            return decodeRecord(br_, R, I_->Name, Blob);
         case INFO_PART_PARENTS:
-            return decodeRecord(R, I_->Namespace, Blob);
+            return decodeRecord(br_, R, I_->Namespace, Blob);
         default:
             return AnyBlock::parseRecord(R, ID, Blob);
         }
@@ -586,9 +616,9 @@ public:
         switch(ID)
         {
         case SOURCE_INFO_DEFLOC:
-            return decodeRecord(R, I.DefLoc, Blob);
+            return decodeRecord(br_, R, I.DefLoc, Blob);
         case SOURCE_INFO_LOC:
-            return decodeRecord(R, I.Loc, Blob);
+            return decodeRecord(br_, R, I.Loc, Blob);
         default:
             return AnyBlock::parseRecord(R, ID, Blob);
         }
@@ -642,13 +672,13 @@ public:
         switch(ID)
         {
         case EXPR_WRITTEN:
-            return decodeRecord(R, I_.Written, Blob);
+            return decodeRecord(br_, R, I_.Written, Blob);
         case EXPR_VALUE:
         {
             if(! on_value)
                 return Error("EXPR_VALUE for expression without value");
             std::uint64_t value = 0;
-            if(auto err = decodeRecord(R, value, Blob))
+            if(auto err = decodeRecord(br_, R, value, Blob))
                 return err;
             on_value(I_, value);
             return Error::success();
@@ -689,7 +719,7 @@ public:
         case TYPEINFO_KIND:
         {
             TypeKind k{};
-            if(auto err = decodeRecord(R, k, Blob))
+            if(auto err = decodeRecord(br_, R, k, Blob))
                 return err;
             switch(k)
             {
@@ -729,14 +759,14 @@ public:
             return Error::success();
         }
         case TYPEINFO_IS_PACK:
-            if(auto err = decodeRecord(R, I_->IsPackExpansion, Blob))
+            if(auto err = decodeRecord(br_, R, I_->IsPackExpansion, Blob))
                 return err;
             return Error::success();
         case TYPEINFO_ID:
             return visit(*I_, [&]<typename T>(T& t)
                 {
                     if constexpr(requires { t.id; })
-                        return decodeRecord(R, t.id, Blob);
+                        return decodeRecord(br_, R, t.id, Blob);
                     else
                         return Error("wrong TypeInfo kind");
                 });
@@ -744,7 +774,7 @@ public:
             return visit(*I_, [&]<typename T>(T& t)
                 {
                     if constexpr(requires { t.Name; })
-                        return decodeRecord(R, t.Name, Blob);
+                        return decodeRecord(br_, R, t.Name, Blob);
                     else
                         return Error("wrong TypeInfo kind");
                 });
@@ -752,19 +782,19 @@ public:
             return visit(*I_, [&]<typename T>(T& t)
                 {
                     if constexpr(requires { t.CVQualifiers; })
-                        return decodeRecord(R, t.CVQualifiers, Blob);
+                        return decodeRecord(br_, R, t.CVQualifiers, Blob);
                     else
                         return Error("wrong TypeInfo kind");
                 });
         case TYPEINFO_REFQUAL:
             if(! I_->isFunction())
                 return Error("wrong TypeInfo kind");
-            return decodeRecord(R, static_cast<
+            return decodeRecord(br_, R, static_cast<
                 FunctionTypeInfo&>(*I_).RefQualifier, Blob);
         case TYPEINFO_EXCEPTION_SPEC:
             if(! I_->isFunction())
                 return Error("wrong TypeInfo kind");
-            return decodeRecord(R, static_cast<
+            return decodeRecord(br_, R, static_cast<
                 FunctionTypeInfo&>(*I_).ExceptionSpec, Blob);
         default:
             return AnyBlock::parseRecord(R, ID, Blob);
@@ -802,9 +832,9 @@ public:
         switch(ID)
         {
         case BASE_ACCESS:
-            return decodeRecord(R, I_.Access, Blob);
+            return decodeRecord(br_, R, I_.Access, Blob);
         case BASE_IS_VIRTUAL:
-            return decodeRecord(R, I_.IsVirtual, Blob);
+            return decodeRecord(br_, R, I_.IsVirtual, Blob);
         default:
             return AnyBlock::parseRecord(R, ID, Blob);
         }
@@ -855,7 +885,7 @@ public:
         case TEMPLATE_ARG_KIND:
         {
             TArgKind kind{};
-            if(auto err = decodeRecord(R, kind, Blob))
+            if(auto err = decodeRecord(br_, R, kind, Blob))
                 return err;
             switch(kind)
             {
@@ -875,13 +905,13 @@ public:
         }
         case TEMPLATE_ARG_IS_PACK:
         {
-            return decodeRecord(R, I_->IsPackExpansion, Blob);
+            return decodeRecord(br_, R, I_->IsPackExpansion, Blob);
         }
         case TEMPLATE_ARG_TEMPLATE:
         {
             if(! I_->isTemplate())
                 return formatError("only TemplateTArgs may reference a template");
-            return decodeRecord(R,
+            return decodeRecord(br_, R,
                 static_cast<TemplateTArg&>(
                     *I_.get()).Template, Blob);
         }
@@ -889,7 +919,7 @@ public:
         {
             if(! I_->isTemplate())
                 return formatError("only TemplateTArgs may have a template name");
-            return decodeRecord(R,
+            return decodeRecord(br_, R,
                 static_cast<TemplateTArg&>(
                     *I_.get()).Name, Blob);
         }
@@ -953,7 +983,7 @@ public:
         case TEMPLATE_PARAM_KIND:
         {
             TParamKind kind{};
-            if(auto err = decodeRecord(R, kind, Blob))
+            if(auto err = decodeRecord(br_, R, kind, Blob))
                 return err;
             switch(kind)
             {
@@ -973,17 +1003,17 @@ public:
         }
         case TEMPLATE_PARAM_NAME:
         {
-            return decodeRecord(R, I_->Name, Blob);
+            return decodeRecord(br_, R, I_->Name, Blob);
         }
         case TEMPLATE_PARAM_IS_PACK:
         {
-            return decodeRecord(R, I_->IsParameterPack, Blob);
+            return decodeRecord(br_, R, I_->IsParameterPack, Blob);
         }
         case TEMPLATE_PARAM_KEY_KIND:
         {
             if(! I_->isType())
                 return formatError("only TypeTParams have a key kind");
-            return decodeRecord(R, static_cast<
+            return decodeRecord(br_, R, static_cast<
                 TypeTParam&>(*I_.get()).KeyKind, Blob);
         }
         default:
@@ -1050,7 +1080,7 @@ public:
         switch(ID)
         {
         case TEMPLATE_PRIMARY_USR:
-            return decodeRecord(R, I_.Primary, Blob);
+            return decodeRecord(br_, R, I_.Primary, Blob);
         default:
             return AnyBlock::parseRecord(R, ID, Blob);
         }
@@ -1185,9 +1215,9 @@ public:
         switch(ID)
         {
         case FUNCTION_PARAM_NAME:
-            return decodeRecord(R, I_.Name, Blob);
+            return decodeRecord(br_, R, I_.Name, Blob);
         case FUNCTION_PARAM_DEFAULT:
-            return decodeRecord(R, I_.Default, Blob);
+            return decodeRecord(br_, R, I_.Default, Blob);
         /*
         case FUNCTION_PARAM_IS_PACK:
             return decodeRecord(R, I_.IsParameterPack, Blob);
@@ -1254,11 +1284,11 @@ public:
         switch(ID)
         {
         case NAMESPACE_MEMBERS:
-            return decodeRecord(R, I->Members, Blob);
+            return decodeRecord(br_, R, I->Members, Blob);
         case NAMESPACE_SPECIALIZATIONS:
-            return decodeRecord(R, I->Specializations, Blob);
+            return decodeRecord(br_, R, I->Specializations, Blob);
         case NAMESPACE_BITS:
-            return decodeRecord(R, {&I->specs.raw}, Blob);
+            return decodeRecord(br_, R, {&I->specs.raw}, Blob);
         default:
             return TopLevelBlock::parseRecord(R, ID, Blob);
         }
@@ -1282,15 +1312,15 @@ public:
         switch(ID)
         {
         case RECORD_KEY_KIND:
-            return decodeRecord(R, I->KeyKind, Blob);
+            return decodeRecord(br_, R, I->KeyKind, Blob);
         case RECORD_IS_TYPE_DEF:
-            return decodeRecord(R, I->IsTypeDef, Blob);
+            return decodeRecord(br_, R, I->IsTypeDef, Blob);
         case RECORD_BITS:
-            return decodeRecord(R, {&I->specs.raw}, Blob);
+            return decodeRecord(br_, R, {&I->specs.raw}, Blob);
         case RECORD_MEMBERS:
-            return decodeRecord(R, I->Members, Blob);
+            return decodeRecord(br_, R, I->Members, Blob);
         case RECORD_SPECIALIZATIONS:
-            return decodeRecord(R, I->Specializations, Blob);
+            return decodeRecord(br_, R, I->Specializations, Blob);
         default:
             return TopLevelBlock::parseRecord(R, ID, Blob);
         }
@@ -1334,9 +1364,9 @@ public:
         switch(ID)
         {
         case FUNCTION_BITS:
-            return decodeRecord(R, {&I->specs0.raw, &I->specs1.raw}, Blob);
+            return decodeRecord(br_, R, {&I->specs0.raw, &I->specs1.raw}, Blob);
         case FUNCTION_CLASS:
-            return decodeRecord(R, I->Class, Blob);
+            return decodeRecord(br_, R, I->Class, Blob);
         default:
             return TopLevelBlock::parseRecord(R, ID, Blob);
         }
@@ -1385,7 +1415,7 @@ public:
         switch(ID)
         {
         case TYPEDEF_IS_USING:
-            return decodeRecord(R, I->IsUsing, Blob);
+            return decodeRecord(br_, R, I->IsUsing, Blob);
         default:
             return TopLevelBlock::parseRecord(R, ID, Blob);
         }
@@ -1429,9 +1459,9 @@ public:
         switch(ID)
         {
         case ENUM_SCOPED:
-            return decodeRecord(R, I->Scoped, Blob);
+            return decodeRecord(br_, R, I->Scoped, Blob);
         case ENUM_MEMBERS:
-            return decodeRecord(R, I->Members, Blob);
+            return decodeRecord(br_, R, I->Members, Blob);
         default:
             return TopLevelBlock::parseRecord(R, ID, Blob);
         }
@@ -1469,7 +1499,7 @@ public:
         switch(ID)
         {
         case VARIABLE_BITS:
-            return decodeRecord(R, {&I->specs.raw}, Blob);
+            return decodeRecord(br_, R, {&I->specs.raw}, Blob);
         default:
             return TopLevelBlock::parseRecord(R, ID, Blob);
         }
@@ -1515,13 +1545,13 @@ public:
         switch(ID)
         {
         case FIELD_DEFAULT:
-            return decodeRecord(R, I->Default, Blob);
+            return decodeRecord(br_, R, I->Default, Blob);
         case FIELD_ATTRIBUTES:
-            return decodeRecord(R, {&I->specs.raw}, Blob);
+            return decodeRecord(br_, R, {&I->specs.raw}, Blob);
         case FIELD_IS_MUTABLE:
-            return decodeRecord(R, I->IsMutable, Blob);
+            return decodeRecord(br_, R, I->IsMutable, Blob);
         case FIELD_IS_BITFIELD:
-            return decodeRecord(R, I->IsBitfield, Blob);
+            return decodeRecord(br_, R, I->IsBitfield, Blob);
         default:
             return TopLevelBlock::parseRecord(R, ID, Blob);
         }
@@ -1566,11 +1596,11 @@ public:
         switch(ID)
         {
         case SPECIALIZATION_PRIMARY:
-            return decodeRecord(R, I->Primary, Blob);
+            return decodeRecord(br_, R, I->Primary, Blob);
         case SPECIALIZATION_MEMBERS:
         {
             std::vector<SymbolID> members;
-            if(auto err = decodeRecord(R, members, Blob))
+            if(auto err = decodeRecord(br_, R, members, Blob))
                 return err;
             for(std::size_t i = 0; i < members.size(); i += 2)
                 I->Members.emplace_back(members[i + 0], members[i + 1]);
@@ -1615,7 +1645,7 @@ public:
         switch(ID)
         {
         case FRIEND_SYMBOL:
-            return decodeRecord(R, I->FriendSymbol, Blob);
+            return decodeRecord(br_, R, I->FriendSymbol, Blob);
         default:
             return TopLevelBlock::parseRecord(R, ID, Blob);
         }

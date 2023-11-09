@@ -40,7 +40,7 @@ renderPage(
             auto pageText = builder(I).value();
 
             std::string fileName = files::appendPath(
-                outputPath_, toBase16(I.id) + ".html");
+                outputPath_, toString(I.id, 16) + ".html");
             std::ofstream os;
             try
             {

@@ -13,6 +13,7 @@
 
 #include "lib/Lib/ConfigImpl.hpp"
 #include "lib/Lib/Info.hpp"
+#include "lib/Lib/Symbols.hpp"
 #include "lib/Support/Debug.hpp"
 #include <mrdocs/Corpus.hpp>
 #include <mrdocs/Metadata.hpp>
@@ -29,6 +30,7 @@ namespace mrdocs {
 */
 class CorpusImpl : public Corpus
 {
+    friend class Corpus;
 public:
     /** Constructor.
     */
@@ -42,6 +44,9 @@ public:
 
     iterator begin() const noexcept override;
     iterator end() const noexcept override;
+
+    const NamespaceInfo&
+    globalNamespace() const noexcept override;
 
     Info*
     find(
@@ -76,13 +81,14 @@ private:
     get(
         SymbolID const& id) noexcept;
 
-private:
-    friend class Corpus;
-
     std::shared_ptr<ConfigImpl const> config_;
 
+//    InfoSet info_;
+
     // Info keyed on Symbol ID.
-    InfoSet info_;
+    mutable InfoContext info_context_;
+
+    InfoSet& info() const noexcept;
 };
 
 template<class T>

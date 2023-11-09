@@ -37,11 +37,14 @@ class ExecutionContext
 {
 protected:
     const ConfigImpl& config_;
+    InfoContext& info_context_;
 
 public:
     ExecutionContext(
+        InfoContext& info_context,
         const ConfigImpl& config)
-        : config_(config)
+        : info_context_(info_context)
+        , config_(config)
     {
     }
 
@@ -55,9 +58,12 @@ public:
     void
     reportEnd(report::Level level) = 0;
 
+    #if 0
     virtual
     mrdocs::Expected<InfoSet>
     results() = 0;
+    #endif
+    virtual Error finalize();
 
     virtual ~ExecutionContext() = default;
 };
@@ -69,7 +75,7 @@ class InfoExecutionContext
 {
     std::shared_mutex mutex_;
     Diagnostics diags_;
-    InfoSet info_;
+    // InfoSet info_;
 
 public:
     using ExecutionContext::ExecutionContext;
@@ -82,8 +88,10 @@ public:
     void
     reportEnd(report::Level level) override;
 
+    #if 0
     mrdocs::Expected<InfoSet>
     results() override;
+    #endif
 };
 
 // ----------------------------------------------------------------
@@ -108,8 +116,12 @@ public:
     void
     reportEnd(report::Level level) override;
 
+    #if 0
     mrdocs::Expected<InfoSet>
     results() override;
+    #else
+    Error finalize() override;
+    #endif
 
     auto& getBitcode()
     {

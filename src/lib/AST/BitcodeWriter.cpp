@@ -612,7 +612,7 @@ emitRecord(
         return;
     Record.push_back(Values.size());
     for(auto const& Sym : Values)
-        Record.append(Sym.begin(), Sym.end());
+        Record.append(Sym.value().begin(), Sym.value().end());
     Stream.EmitRecordWithAbbrev(Abbrevs.get(ID), Record);
 }
 
@@ -649,11 +649,11 @@ emitRecord(
     MRDOCS_ASSERT(RecordIDNameMap[ID] && "Unknown RecordID.");
     MRDOCS_ASSERT(RecordIDNameMap[ID].Abbrev == &SymbolIDAbbrev &&
         "Abbrev type mismatch.");
-    if (!prepRecordData(ID, !! Sym))
+    if (!prepRecordData(ID, Sym.valid()))
         return;
-    MRDOCS_ASSERT(Sym.size() == 20);
-    Record.push_back(Sym.size());
-    Record.append(Sym.begin(), Sym.end());
+    auto value = Sym.value();
+    Record.push_back(value.size());
+    Record.append(value.begin(), value.end());
     Stream.EmitRecordWithAbbrev(Abbrevs.get(ID), Record);
 }
 

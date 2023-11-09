@@ -107,7 +107,7 @@ class SafeNames::Impl
     getUnqualified(
         const Info& I)
     {
-        MRDOCS_ASSERT(I.id && I.id != SymbolID::global);
+        MRDOCS_ASSERT(I.id && I.id != corpus_.globalNamespace().id);
         return visit(I, [&]<typename T>(
             const T& t) -> std::string_view
             {
@@ -211,7 +211,7 @@ class SafeNames::Impl
     {
         // generate the unqualified name and SymbolID string
         SafeNameInfo& info = map_.emplace(I.id, SafeNameInfo(
-            name, 0, toBase16(I.id, true))).first->second;
+            name, 0, toString(I.id, 16, true))).first->second;
         // if there are other symbols with the same name, then disambiguation
         // is required. iterate over the other symbols with the same unqualified name,
         // and calculate the minimum number of characters from the SymbolID needed
@@ -388,7 +388,7 @@ getUnqualified(
     SymbolID const& id) const
 {
     if(! impl_)
-        return toBase16(id);
+        return toString(id, 16);
     std::string result;
     impl_->getSafeUnqualified(result, id);
     return result;
@@ -401,7 +401,7 @@ getQualified(
     char delim) const
 {
     if(! impl_)
-        return toBase16(id);
+        return toString(id, 16);
     std::string result;
     impl_->getSafeQualified(result, id, delim);
     return result;

@@ -537,7 +537,7 @@ writeSpecialization(
 {
     tags_.open(specializationTagName, {
         {I.id},
-        {"primary", toString(I.Primary) }
+        {"primary", toString(I.Primary, 64) }
     });
 
     for(const auto& targ : I.Args)

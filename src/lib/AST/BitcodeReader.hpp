@@ -20,6 +20,7 @@
 //
 
 #include "BitcodeIDs.hpp"
+#include "lib/Lib/Info.hpp"
 #include <mrdocs/Metadata.hpp>
 #include <mrdocs/Support/Error.hpp>
 #include <llvm/ADT/SmallVector.h>
@@ -36,8 +37,10 @@ class BitcodeReader
 {
 public:
     BitcodeReader(
-        llvm::BitstreamCursor& Stream)
+        llvm::BitstreamCursor& Stream,
+        InfoContext& Context)
         : Stream(Stream)
+        , Context(Context)
     {
     }
 
@@ -73,6 +76,7 @@ public:
 
 public:
     llvm::BitstreamCursor& Stream;
+    InfoContext& Context;
     std::optional<llvm::BitstreamBlockInfo> BlockInfo;
     std::vector<AnyBlock*> blockStack_;
 };

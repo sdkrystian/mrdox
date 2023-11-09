@@ -71,15 +71,6 @@ write(
 
 //------------------------------------------------
 
-std::string
-toString(
-    SymbolID const& id)
-{
-    return toBase64(id);
-}
-
-//------------------------------------------------
-
 Attributes::
 Attributes(
     std::initializer_list<Attribute> attrs)

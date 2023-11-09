@@ -28,6 +28,7 @@ Corpus::~Corpus() noexcept = default;
 //
 //------------------------------------------------
 
+#if 0
 /** Return the metadata for the global namespace.
 */
 NamespaceInfo const&
@@ -36,6 +37,7 @@ globalNamespace() const noexcept
 {
     return get<NamespaceInfo>(SymbolID::global);
 }
+#endif
 
 //------------------------------------------------
 //
@@ -51,11 +53,11 @@ getFullyQualifiedName(
     std::string& temp) const
 {
     temp.clear();
-    if(! I.id || I.id == SymbolID::global)
+    if(! I.id || I.id == globalNamespace().id)
         return temp;
 
     MRDOCS_ASSERT(! I.Namespace.empty());
-    MRDOCS_ASSERT(I.Namespace.back() == SymbolID::global);
+    MRDOCS_ASSERT(I.Namespace.back() == globalNamespace().id);
     for(auto const& ns_id : I.Namespace |
         std::views::reverse |
         std::views::drop(1))

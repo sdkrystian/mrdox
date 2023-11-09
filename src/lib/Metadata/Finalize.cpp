@@ -28,6 +28,7 @@ namespace mrdocs {
 class Finalizer
 {
     InfoSet& info_;
+    InfoContext& info_context_;
     SymbolLookup& lookup_;
     Info* current_ = nullptr;
 
@@ -51,8 +52,10 @@ class Finalizer
                 qualifier.push_back(part);
             if(parse_result->qualifier.empty())
             {
-                MRDOCS_ASSERT(info_.contains(SymbolID::global));
-                context = info_.find(SymbolID::global)->get();
+                MRDOCS_ASSERT(info_.contains(
+                    info_context_.globalNamespaceID()));
+                context = info_.find(
+                    info_context_.globalNamespaceID())->get();
             }
             found = lookup_.lookupQualified(
                 context, qualifier, parse_result->name);
@@ -231,9 +234,10 @@ class Finalizer
 
 public:
     Finalizer(
-        InfoSet& Info,
+        InfoContext& info_context,
         SymbolLookup& Lookup)
-        : info_(Info)
+        : info_context_(info_context)
+        , info_(info_context.info())
         , lookup_(Lookup)
     {
     }
@@ -326,11 +330,14 @@ public:
     }
 };
 
-void finalize(InfoSet& Info, SymbolLookup& Lookup)
+void finalize(InfoContext& Context, SymbolLookup& Lookup)
 {
-    Finalizer visitor(Info, Lookup);
-    for(auto& I : Info)
+    Finalizer visitor(Context, Lookup);
+    for(auto& I : Context.info())
     {
+        SymbolID id = I.get()->id;
+        report::debug("    {}", id->Name);
+
         MRDOCS_ASSERT(I);
         visitor.finalize(*I);
     }

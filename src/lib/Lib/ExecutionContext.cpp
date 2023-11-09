@@ -51,6 +51,17 @@ void merge(Info& I, Info&& Other)
 // InfoExecutionContext
 // ----------------------------------------------------------------
 
+Error
+ExecutionContext::
+finalize()
+{
+    return Error::success();
+}
+
+// ----------------------------------------------------------------
+// InfoExecutionContext
+// ----------------------------------------------------------------
+
 void
 InfoExecutionContext::
 report(
@@ -69,6 +80,8 @@ report(
     std::unique_lock<std::shared_mutex> write_lock(mutex_);
     // add all new Info to the existing set. after this call,
     // info will only contain duplicates which will require merging
+
+    #if 0
     info_.merge(info);
 
     for(auto& other : info)
@@ -77,6 +90,16 @@ report(
         MRDOCS_ASSERT(it != info_.end());
         merge(**it, std::move(*other));
     }
+    #else
+    info_context_.info().merge(info);
+
+    for(auto& other : info)
+    {
+        auto it = info_context_.info().find(other->id);
+        MRDOCS_ASSERT(it != info_context_.info().end());
+        merge(**it, std::move(*other));
+    }
+    #endif
 
     diags_.mergeAndReport(std::move(diags));
 }
@@ -88,13 +111,14 @@ reportEnd(report::Level level)
     diags_.reportTotals(level);
 }
 
-
+#if 0
 mrdocs::Expected<InfoSet>
 InfoExecutionContext::
 results()
 {
     return std::move(info_);
 }
+#endif
 
 // ----------------------------------------------------------------
 // BitcodeExecutionContext
@@ -128,11 +152,12 @@ reportEnd(report::Level level)
     diags_.reportTotals(level);
 }
 
+#if 0
 mrdocs::Expected<InfoSet>
 BitcodeExecutionContext::
 results()
 {
-    InfoSet result;
+    InfoSet& result = info_context_.info();
     auto errors = config_.threadPool().forEach(
         bitcode_,
         [&](auto& Group)
@@ -162,7 +187,43 @@ results()
         return Unexpected(errors);
     return result;
 }
+#else
+Error
+BitcodeExecutionContext::
+finalize()
+{
+    InfoSet& result = info_context_.info();
+    auto errors = config_.threadPool().forEach(
+        bitcode_,
+        [&](auto& Group)
+        {
+            // One or more Info for the same symbol ID
+            std::vector<std::unique_ptr<Info>> Infos;
 
+            // Each Bitcode can have multiple Infos
+            for(auto& bitcode : Group.second)
+            {
+                auto infos = readBitcode(bitcode, info_context_);
+                std::move(
+                    infos->begin(),
+                    infos->end(),
+                    std::back_inserter(Infos));
+            }
+
+            auto merged = mergeInfos(Infos);
+            std::unique_ptr<Info> I = std::move(merged.value());
+            MRDOCS_ASSERT(I);
+            MRDOCS_ASSERT(Group.first == I->id);
+            std::lock_guard<std::mutex> lock(mutex_);
+            result.emplace(std::move(I));
+        });
+
+    if(! errors.empty())
+        return errors;
+    return Error::success();
+}
+
+#endif
 
 } // mrdocs
 } // clang

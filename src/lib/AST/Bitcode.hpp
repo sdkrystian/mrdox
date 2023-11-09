@@ -12,6 +12,7 @@
 #ifndef MRDOCS_LIB_AST_BITCODE_HPP
 #define MRDOCS_LIB_AST_BITCODE_HPP
 
+#include "lib/Lib/Info.hpp"
 #include <mrdocs/Platform.hpp>
 #include <mrdocs/Metadata/Info.hpp>
 #include <mrdocs/Support/Error.hpp>
@@ -31,7 +32,7 @@ writeBitcode(Info const& I);
 /** Return an array of Info read from a bitstream.
 */
 mrdocs::Expected<std::vector<std::unique_ptr<Info>>>
-readBitcode(llvm::StringRef bitcode);
+readBitcode(llvm::StringRef bitcode, InfoContext& context);
 
 } // mrdocs
 } // clang

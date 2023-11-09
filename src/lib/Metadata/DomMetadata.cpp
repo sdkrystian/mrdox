@@ -609,7 +609,7 @@ DomInfo<T>::construct() const
 {
     storage_type entries;
     entries.insert(entries.end(), {
-        { "id",         toBase16(I_.id) },
+        { "id",         toString(I_.id, 16) },
         { "kind",       toString(I_.Kind) },
         { "access",     toString(I_.Access) },
         { "implicit",   I_.Implicit },

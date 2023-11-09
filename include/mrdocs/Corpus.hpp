@@ -71,8 +71,9 @@ public:
     /** Return the metadata for the global namespace.
     */
     MRDOCS_DECL
+    virtual
     NamespaceInfo const&
-    globalNamespace() const noexcept;
+    globalNamespace() const noexcept = 0;
 
     /** Return the Info with the matching ID, or nullptr.
     */
