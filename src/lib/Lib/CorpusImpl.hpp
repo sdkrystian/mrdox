@@ -13,7 +13,6 @@
 
 #include "lib/Lib/ConfigImpl.hpp"
 #include "lib/Lib/Info.hpp"
-#include "lib/Lib/Symbols.hpp"
 #include "lib/Support/Debug.hpp"
 #include <mrdocs/Corpus.hpp>
 #include <mrdocs/Metadata.hpp>

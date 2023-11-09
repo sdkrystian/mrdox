@@ -335,9 +335,6 @@ void finalize(InfoContext& Context, SymbolLookup& Lookup)
     Finalizer visitor(Context, Lookup);
     for(auto& I : Context.info())
     {
-        SymbolID id = I.get()->id;
-        report::debug("    {}", id->Name);
-
         MRDOCS_ASSERT(I);
         visitor.finalize(*I);
     }
