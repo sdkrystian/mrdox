@@ -24,12 +24,13 @@ NamespaceOverloads(
     std::vector<FunctionInfo const*> data)
     : data_(std::move(data))
 {
+#if 0
     // Sort to group the overloads, preserving order
     llvm::stable_sort(data_,
         []( FunctionInfo const* f0,
             FunctionInfo const* f1)
         {
-            return compareSymbolNames(f0->Name, f1->Name) < 0;
+            return (f0->Name <=> f1->Name) < 0;
         });
 
     // Find the end of the range of each overload set
@@ -49,6 +50,8 @@ NamespaceOverloads(
             { it0, it } });
         it0 = it;
     }
+#endif
+    MRDOCS_UNREACHABLE();
 }
 
 NamespaceOverloads

@@ -15,6 +15,7 @@
 namespace clang {
 namespace mrdocs {
 
+#if 0
 // Better have 8 bits per byte, otherwise
 // we are going to be having some problems...
 static_assert(CHAR_BIT == 8);
@@ -85,6 +86,7 @@ do_tiebreak:
         return std::strong_ordering::greater;
     return std::strong_ordering::equivalent;
 }
+#endif
 
 } // mrdocs
 } // clang

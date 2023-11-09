@@ -131,6 +131,8 @@ struct TagTypeInfo
     std::unique_ptr<TypeInfo> ParentType;
     std::string Name;
     SymbolID id = SymbolID::invalid;
+
+    SymbolName Symbol;
 };
 
 struct SpecializationTypeInfo

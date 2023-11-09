@@ -1017,6 +1017,358 @@ public:
 
     }
 
+    struct TypeInfoCollector
+    {
+        bool IsPack = false;
+        const NamedDecl* Declaration = nullptr;
+        const IdentifierInfo* Identifier = nullptr;
+        const NestedNameSpecifier* Prefix = nullptr;
+        std::string Name;
+        std::optional<llvm::ArrayRef<TemplateArgument>> TemplateArgs;
+    };
+
+    template<
+        typename NonTerminal,
+        typename Terminal>
+    void
+    unwrapTerminalType(
+        QualType qt,
+        NonTerminal&& OnNonTerminal,
+        Terminal&& OnTerminal,
+        ExtractMode extract_mode = ExtractMode::IndirectDependency)
+    {
+        // extract_mode is only used during the extraction
+        // the terminal type & its parents; the extraction of
+        // function parameters, template arguments, and the parent class
+        // of member pointers is done in ExtractMode::IndirectDependency
+        ExtractionScope scope = enterMode(extract_mode);
+
+        TypeInfoCollector info;
+        // auto OnNonTerminal = [](const Type* Ty, unsigned Quals) { };
+        // auto OnTerminal = [](const Type* Ty, unsigned Quals,
+        //     const TypeInfoCollector&) { };
+
+        while(true)
+        {
+            // should never be called for a null QualType
+            MRDOCS_ASSERT(! qt.isNull());
+            const Type* type = qt.getTypePtr();
+            unsigned quals = qt.getLocalFastQualifiers();
+
+            switch(qt->getTypeClass())
+            {
+            // parenthesized types
+            case Type::Paren:
+            {
+                auto* T = cast<ParenType>(type);
+                qt = T->getInnerType().withFastQualifiers(quals);
+                continue;
+            }
+            case Type::MacroQualified:
+            {
+                auto* T = cast<MacroQualifiedType>(type);
+                qt = T->getUnderlyingType().withFastQualifiers(quals);
+                continue;
+            }
+            // type with __atribute__
+            case Type::Attributed:
+            {
+                auto* T = cast<AttributedType>(type);
+                qt = T->getModifiedType().withFastQualifiers(quals);
+                continue;
+            }
+            // adjusted and decayed types
+            case Type::Decayed:
+            case Type::Adjusted:
+            {
+                auto* T = cast<AdjustedType>(type);
+                qt = T->getOriginalType().withFastQualifiers(quals);
+                continue;
+            }
+            // using declarations
+            case Type::Using:
+            {
+                auto* T = cast<UsingType>(type);
+                // look through the using declaration and
+                // use the the type from the referenced declaration
+                qt = T->getUnderlyingType().withFastQualifiers(quals);
+                continue;
+            }
+            case Type::SubstTemplateTypeParm:
+            {
+                auto* T = cast<SubstTemplateTypeParmType>(type);
+                qt = T->getReplacementType().withFastQualifiers(quals);
+                continue;
+            }
+            // pack expansion
+            case Type::PackExpansion:
+            {
+                auto* T = cast<PackExpansionType>(type);
+                // we just use a flag to represent whether this is
+                // a pack expansion rather than a type kind
+                info.IsPack = true;
+                qt = T->getPattern().withFastQualifiers(quals);
+                continue;
+            }
+            // elaborated type specifier or
+            // type with nested name specifier
+            case Type::Elaborated:
+            {
+                auto* T = cast<ElaboratedType>(type);
+                // there should only ever be one
+                // nested-name-specifier for the terminal type
+                info.Prefix = T->getQualifier();
+                qt = T->getNamedType().withFastQualifiers(quals);
+                continue;
+            }
+
+
+
+            // pointers
+            case Type::Pointer:
+            {
+                auto* T = cast<PointerType>(type);
+                OnNonTerminal(T, quals);
+                qt = T->getPointeeType();
+                continue;
+            }
+            // references
+            case Type::LValueReference:
+            {
+                auto* T = cast<LValueReferenceType>(type);
+                OnNonTerminal(T, quals);
+                qt = T->getPointeeType();
+                continue;
+            }
+            case Type::RValueReference:
+            {
+                auto* T = cast<RValueReferenceType>(type);
+                OnNonTerminal(T, quals);
+                qt = T->getPointeeType();
+                continue;
+            }
+            // pointer to members
+            case Type::MemberPointer:
+            {
+                auto* T = cast<MemberPointerType>(type);
+                OnNonTerminal(T, quals);
+                qt = T->getPointeeType();
+                continue;
+            }
+            // KRYSTIAN NOTE: we don't handle FunctionNoProto here,
+            // and it's unclear if we should. we should not encounter
+            // such types in c++ (but it might be possible?)
+            // functions
+            case Type::FunctionProto:
+            {
+                auto* T = cast<FunctionProtoType>(type);
+                OnNonTerminal(T, quals);
+                qt = T->getReturnType();
+                continue;
+            }
+            // KRYSTIAN FIXME: do we handle variables arrays?
+            // they can only be created within function scope
+            // arrays
+            case Type::IncompleteArray:
+            {
+                auto* T = cast<IncompleteArrayType>(type);
+                OnNonTerminal(T, quals);
+                qt = T->getElementType();
+                continue;
+            }
+            case Type::ConstantArray:
+            {
+                auto* T = cast<ConstantArrayType>(type);
+                OnNonTerminal(T, quals);
+                qt = T->getElementType();
+                continue;
+            }
+            case Type::DependentSizedArray:
+            {
+                auto* T = cast<DependentSizedArrayType>(type);
+                OnNonTerminal(T, quals);
+                qt = T->getElementType();
+                continue;
+            }
+
+            // ------------------------------------------------
+            // terminal TypeInfo nodes
+            case Type::Decltype:
+            {
+                auto* T = cast<DecltypeType>(type);
+                OnTerminal(T, quals, info);
+                break;
+            }
+            case Type::Auto:
+            {
+                auto* T = cast<AutoType>(type);
+                QualType deduced = T->getDeducedType();
+                // KRYSTIAN NOTE: we don't use isDeduced because it will
+                // return true if the type is dependent
+                // if the type has been deduced, use the deduced type
+                if(! deduced.isNull())
+                {
+                    qt = deduced;
+                    continue;
+                }
+                // otherwise, use the placeholder type specifier
+                info.Name = getTypeAsString(
+                    qt.withoutLocalFastQualifiers());
+                OnTerminal(T, quals, info);
+                break;
+            }
+            case Type::DeducedTemplateSpecialization:
+            {
+                auto* T = cast<DeducedTemplateSpecializationType>(type);
+                QualType deduced = T->getDeducedType();
+                // if(! T->isDeduced())
+                if(! deduced.isNull())
+                {
+                    qt = deduced;
+                    continue;
+                }
+                info.Declaration = T->getTemplateName().getAsTemplateDecl();
+                OnTerminal(T, quals, info);
+                break;
+            }
+            // qualified dependent name with template keyword
+            case Type::DependentTemplateSpecialization:
+            {
+                auto* T = cast<DependentTemplateSpecializationType>(type);
+                info.Identifier = T->getIdentifier();
+                info.TemplateArgs.emplace(T->template_arguments());
+                info.Prefix = T->getQualifier();
+                OnTerminal(T, quals, info);
+                break;
+            }
+            // dependent typename-specifier
+            case Type::DependentName:
+            {
+                auto* T = cast<DependentNameType>(type);
+                auto I = makeTypeInfo<TagTypeInfo>(
+                    T->getIdentifier(), quals);
+                info.Identifier = T->getIdentifier();
+                info.Prefix = T->getQualifier();
+                OnTerminal(T, quals, info);
+                break;
+            }
+            // specialization of a class/alias template or
+            // template template parameter
+            case Type::TemplateSpecialization:
+            {
+                auto* T = cast<TemplateSpecializationType>(type);
+                auto name = T->getTemplateName();
+                MRDOCS_ASSERT(! name.isNull());
+                NamedDecl* ND = name.getAsTemplateDecl();
+                // if this is a specialization of a alias template,
+                // the canonical type will be the named type. in such cases,
+                // we will use the template name. otherwise, we use the
+                // canonical type whenever possible.
+                if(! T->isTypeAlias())
+                {
+                    auto* CT = qt.getCanonicalType().getTypePtrOrNull();
+                    if(auto* ICT = dyn_cast_or_null<InjectedClassNameType>(CT))
+                        ND = ICT->getDecl();
+                    else if(auto* RT = dyn_cast_or_null<RecordType>(CT))
+                        ND = RT->getDecl();
+                }
+                info.Declaration = ND;
+                info.TemplateArgs.emplace(T->template_arguments());
+                OnTerminal(T, quals, info);
+                break;
+            }
+            case Type::Record:
+            {
+                auto* T = cast<RecordType>(type);
+                RecordDecl* RD = T->getDecl();
+                // if this is an instantiation of a class template,
+                // create a SpecializationTypeInfo & extract the template arguments
+                info.Declaration = RD;
+                if(auto* CTSD = dyn_cast<ClassTemplateSpecializationDecl>(RD))
+                    info.TemplateArgs.emplace(CTSD->getTemplateArgs().asArray());
+                OnTerminal(T, quals, info);
+                break;
+            }
+            // enum types, as well as injected class names
+            // within a class template (or specializations thereof)
+            case Type::InjectedClassName:
+            case Type::Enum:
+            {
+                info.Declaration = type->getAsTagDecl();
+                OnTerminal(type, quals, info);
+                break;
+            }
+            // typedef/alias type
+            case Type::Typedef:
+            {
+                auto* T = cast<TypedefType>(type);
+                info.Declaration = T->getDecl();
+                OnTerminal(type, quals, info);
+                break;
+            }
+            case Type::TemplateTypeParm:
+            {
+                auto* T = cast<TemplateTypeParmType>(type);
+                if(auto* D = T->getDecl())
+                {
+                    // special case for implicit template parameters
+                    // resulting from abbreviated function templates
+                    if(D->isImplicit())
+                        info.Name = "auto";
+                    else
+                        info.Declaration = D;
+                    // else if(auto* II = D->getIdentifier())
+                    //     I->Name = II->getName();
+                }
+                OnTerminal(type, quals, info);
+                break;
+            }
+            // this only seems to appear when a template parameter pack
+            // from an enclosing template appears in a pack expansion which contains
+            // a template parameter pack from an inner template. this does not seem
+            // to appear when both packs are template arguments; e.g.
+            // A<sizeof...(Ts), sizeof...(Us)> will use this, but A<A<Ts, Us>...> will not
+            case Type::SubstTemplateTypeParmPack:
+            {
+                auto* T = cast<SubstTemplateTypeParmPackType>(type);
+                info.Identifier = T->getIdentifier();
+                OnTerminal(type, quals, info);
+                break;
+            }
+            // builtin/unhandled type
+            default:
+            {
+                info.Name = getTypeAsString(
+                    qt.withoutLocalFastQualifiers());
+                OnTerminal(type, quals, info);
+                break;
+            }
+            }
+
+        }
+
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     /** Get the user-written `Decl` for a `Decl`
 
         Given a `Decl` `D`, `getInstantiatedFrom` will return the

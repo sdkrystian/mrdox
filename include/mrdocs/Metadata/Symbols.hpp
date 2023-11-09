@@ -18,7 +18,10 @@
 #include <cstdint>
 #include <cstring>
 #include <compare>
+#include <memory>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace clang {
 namespace mrdocs {
@@ -77,6 +80,7 @@ public:
             const char*>(data()), size());
     }
 
+    #if 0
     auto operator<=>(
         const SymbolID& other) const noexcept
     {
@@ -85,9 +89,9 @@ public:
             other.data(),
             size()) <=> 0;
     }
+    #endif
 
-    bool operator==(
-        const SymbolID& other) const noexcept = default;
+    bool operator==(const SymbolID&) const noexcept = default;
 
 private:
     value_type data_[20];
@@ -105,6 +109,7 @@ constexpr inline SymbolID SymbolID::global =
     "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
     "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF";
 
+#if 0
 /** Return the result of comparing s0 to s1.
 
     This function returns true if the string
@@ -119,6 +124,43 @@ std::strong_ordering
 compareSymbolNames(
     std::string_view symbolName0,
     std::string_view symbolName1) noexcept;
+#endif
+
+class TArg;
+
+// KRYSTIAN FIXME: this entire class needs to be rewritten
+/** Represents a qualified name referencing a symbol.
+
+    This can represent the fully qualified name of a symbol,
+    regardless of whether it exists in the corpus.
+*/
+class SymbolName
+{
+public:
+    /** The parent of the referenced symbol, if any.
+    */
+    std::unique_ptr<SymbolName> Prefix;
+
+    /** The ID of the referenced symbol.
+
+        Only valid if the referenced symbol exists
+        in the corpus.
+    */
+    SymbolID id = SymbolID::invalid;
+
+    /** The name of the referenced symbol.
+
+        This stores the name of the referenced symbol
+        regardless of whether it exists.
+    */
+    std::string Name;
+
+    bool HasTemplateArgs = false;
+
+    /** The template arguments if this is a template-id.
+    */
+    std::vector<std::unique_ptr<TArg>> TemplateArgs;
+};
 
 } // mrdocs
 } // clang
