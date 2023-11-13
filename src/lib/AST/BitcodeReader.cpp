@@ -14,9 +14,122 @@
 #include "lib/Support/Debug.hpp"
 #include "lib/Support/Error.hpp"
 #include <mrdocs/Support/Error.hpp>
+#include <utility>
 
 namespace clang {
 namespace mrdocs {
+
+Error
+RecordReader::
+readRecord(
+    llvm::BitstreamCursor& Cursor,
+    unsigned AbbrevID,
+    unsigned& RecordID)
+{
+    Data.clear();
+    Blob = llvm::StringRef();
+    Index = 0;
+    llvm::Expected<unsigned> MaybeRecordID =
+        Cursor.readRecord(AbbrevID, Data, &Blob);
+    if(! MaybeRecordID)
+        return toError(MaybeRecordID.takeError());
+    RecordID = MaybeRecordID.get();
+    return Error::success();
+}
+
+
+template<typename Integral>
+requires std::integral<Integral>
+Integral
+RecordReader::
+readInteger()
+{
+    Integral result;
+    readInteger(result);
+    return result;
+}
+
+template<typename Integral>
+requires std::integral<Integral>
+void
+RecordReader::
+readInteger(Integral& result)
+{
+    using Limits = std::numeric_limits<Integral>;
+    MRDOCS_ASSERT(Index < Data.size());
+    MRDOCS_ASSERT(std::in_range<Integral>(Data[Index]));
+    result = static_cast<Integral>(Data[Index++]);
+}
+
+bool
+RecordReader::
+readBool()
+{
+    bool result;
+    readBool(result);
+    return result;
+}
+
+void
+RecordReader::
+readBool(bool& result)
+{
+    MRDOCS_ASSERT(Index < Data.size());
+    MRDOCS_ASSERT(Data[Index] <= 1);
+    result = static_cast<bool>(Data[Index++]);
+}
+
+template<typename Enum>
+requires std::is_enum_v<Enum>
+Enum
+RecordReader::
+readEnum()
+{
+    Enum result;
+    readEnum(result);
+    return result;
+}
+
+template<typename Enum>
+requires std::is_enum_v<Enum>
+void
+RecordReader::
+readEnum(Enum& result)
+{
+    result = static_cast<Enum>(readInteger<
+        std::underlying_type_t<Enum>>());
+}
+
+std::string
+RecordReader::
+readString()
+{
+    std::string result;
+    readString(result);
+    return result;
+}
+
+void
+RecordReader::
+readString(std::string& result)
+{
+    auto size = readInteger<std::size_t>();
+    MRDOCS_ASSERT(Data.size() - Index >= size);
+    result.assign(
+        Data.begin() + Index,
+        Data.begin() + Index + size);
+    Index += size;
+}
+
+void
+RecordReader::
+readLocation(Location& result)
+{
+    readString(result.Path);
+    readString(result.Filename);
+    readInteger(result.LineNumber);
+    readEnum(result.Kind);
+}
 
 // Entry point
 mrdocs::Expected<std::vector<std::unique_ptr<Info>>>
@@ -190,7 +303,7 @@ readBlock(
     if (auto err = Stream.EnterSubBlock(ID))
         return toError(std::move(err));
     blockStack_.push_back(&B);
-    Record RecordData;
+    RecordReader Record;
     for(;;)
     {
         llvm::Expected<llvm::BitstreamEntry> MaybeEntry = Stream.advance();
@@ -200,15 +313,13 @@ readBlock(
         {
         case llvm::BitstreamEntry::Record:
         {
-            llvm::StringRef Blob;
-            llvm::Expected<unsigned> MaybeRecordID =
-                Stream.readRecord(Entry.ID, RecordData, &Blob);
-            if (! MaybeRecordID)
-                return toError(MaybeRecordID.takeError());
-            if(auto err = blockStack_.back()->parseRecord(
-                RecordData, MaybeRecordID.get(), Blob))
+            unsigned RecordID;
+            if(auto err = Record.readRecord(Stream, Entry.ID, RecordID))
                 return err;
-            RecordData.clear();
+            blockStack_.back()->Reader = &Record;
+            if(auto err = blockStack_.back()->parseRecord(
+                Record.Data, RecordID, Record.Blob))
+                return err;
             continue;
         }
         case llvm::BitstreamEntry::SubBlock:
@@ -238,6 +349,7 @@ readBlock(
 mrdocs::Expected<std::vector<std::unique_ptr<Info>>>
 readBitcode(llvm::StringRef bitcode)
 {
+    report::debug("bitcode size = {}", bitcode.size());
     llvm::BitstreamCursor Stream(bitcode);
     BitcodeReader reader(Stream);
     return reader.getInfos();

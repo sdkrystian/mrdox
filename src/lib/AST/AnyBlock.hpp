@@ -195,6 +195,8 @@ struct BitcodeReader::AnyBlock
 {
     virtual ~AnyBlock() = default;
 
+    RecordReader* Reader = nullptr;
+
     virtual
     Error
     parseRecord(
@@ -546,6 +548,18 @@ public:
             return decodeRecord(R, I_->Name, Blob);
         case INFO_PART_PARENTS:
             return decodeRecord(R, I_->Namespace, Blob);
+        case INFO_PART_SOURCE:
+            if constexpr(std::derived_from<InfoTy, SourceInfo>)
+            {
+                auto& source = *static_cast<SourceInfo*>(I_.get());
+                if(Reader->readBool())
+                    Reader->readLocation(source.DefLoc.emplace());
+                auto n_decls = Reader->readInteger<std::size_t>();
+                source.Loc.reserve(n_decls);
+                while(n_decls--)
+                    Reader->readLocation(source.Loc.emplace_back());
+                return Error::success();
+            }
         default:
             return AnyBlock::parseRecord(R, ID, Blob);
         }

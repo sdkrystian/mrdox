@@ -79,6 +79,7 @@ public:
     void emitRecord(Location const& Loc, RecordID ID);
     void emitRecord(bool Value, RecordID ID);
     void emitRecord(std::initializer_list<BitFieldFullValue> values, RecordID ID);
+    void emitRecord(RecordID ID);
 
     bool prepRecordData(RecordID ID, bool ShouldEmit = true);
 
@@ -102,7 +103,8 @@ public:
     template<typename T>
     void emitBlock(doc::List<T> const& list);
 
-    void emitInfoPart(Info const& I);
+    template<std::derived_from<Info> InfoTy>
+    void emitInfoPart(InfoTy const& I);
     void emitSourceInfo(SourceInfo const& S);
 
     void emitBlock(BaseInfo const& I);
@@ -131,6 +133,26 @@ public:
     void emitBlock(ExprInfoTy const& E);
 
     //--------------------------------------------
+
+    using RecordData = llvm::SmallVector<
+        std::uint64_t, 64>;
+
+    RecordData Data;
+
+
+    template<typename Integral>
+    requires std::integral<Integral>
+    void writeInteger(Integral value);
+
+    void writeBool(bool value);
+
+    template<class Enum>
+    requires std::is_enum_v<Enum>
+    void writeEnum(Enum value);
+
+    void writeString(std::string_view value);
+
+    void writeLocation(const Location& loc);
 
 private:
     class AbbreviationMap

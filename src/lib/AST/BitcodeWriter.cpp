@@ -12,6 +12,7 @@
 
 #include "Bitcode.hpp"
 #include "BitcodeWriter.hpp"
+#include <mrdocs/Support/TypeTraits.hpp>
 #include <memory>
 
 namespace clang {
@@ -537,6 +538,52 @@ emitAbbrev(
 //
 //------------------------------------------------
 
+template<typename Integral>
+requires std::integral<Integral>
+void
+BitcodeWriter::
+writeInteger(Integral value)
+{
+    Data.push_back(static_cast<
+        std::uint64_t>(value));
+}
+
+void
+BitcodeWriter::
+writeBool(bool value)
+{
+    writeInteger(value);
+}
+
+template<class Enum>
+requires std::is_enum_v<Enum>
+void
+BitcodeWriter::
+writeEnum(Enum value)
+{
+    writeInteger(to_underlying(value));
+}
+
+void
+BitcodeWriter::
+writeString(std::string_view value)
+{
+    writeInteger(value.size());
+    Data.insert(Data.end(),
+        value.begin(), value.end());
+}
+
+void
+BitcodeWriter::
+writeLocation(const Location& loc)
+{
+    writeString(loc.Path);
+    writeString(loc.Filename);
+    writeInteger(loc.LineNumber);
+    writeEnum(loc.Kind);
+}
+
+
 // Integer
 template<class Integer>
 requires std::integral<Integer>
@@ -723,6 +770,14 @@ prepRecordData(
     return true;
 }
 
+void
+BitcodeWriter::
+emitRecord(RecordID ID)
+{
+    Stream.EmitRecord(ID, Data);
+    Data.clear();
+}
+
 //------------------------------------------------
 
 void
@@ -758,10 +813,11 @@ emitBlock(
         emitBlock(*node);
 }
 
+template<std::derived_from<Info> InfoTy>
 void
 BitcodeWriter::
 emitInfoPart(
-    Info const& I)
+    InfoTy const& I)
 {
     StreamSubBlockGuard Block(Stream, BI_INFO_PART_ID);
     emitRecord(I.id, INFO_PART_ID);
@@ -770,6 +826,19 @@ emitInfoPart(
     emitRecord(I.Name, INFO_PART_NAME);
     emitRecord(I.Namespace, INFO_PART_PARENTS);
     emitBlock(I.javadoc);
+
+    #if 1
+    if constexpr(std::derived_from<InfoTy, SourceInfo>)
+    {
+        writeBool(I.DefLoc.has_value());
+        if(I.DefLoc)
+            writeLocation(*I.DefLoc);
+        writeInteger(I.Loc.size());
+        for(const Location& loc : I.Loc)
+            writeLocation(loc);
+        emitRecord(INFO_PART_SOURCE);
+    }
+    #endif
 }
 
 void
@@ -777,11 +846,13 @@ BitcodeWriter::
 emitSourceInfo(
     const SourceInfo& S)
 {
+#if 0
     StreamSubBlockGuard Block(Stream, BI_SOURCE_INFO_ID);
     if(S.DefLoc)
         emitRecord(*S.DefLoc, SOURCE_INFO_DEFLOC);
     for(const auto& L : S.Loc)
         emitRecord(L, SOURCE_INFO_LOC);
+#endif
 }
 
 void

@@ -31,6 +31,45 @@ namespace mrdocs {
 
 using Record = llvm::SmallVector<uint64_t, 1024>;
 
+class RecordReader
+{
+public:
+    Record Data;
+    llvm::StringRef Blob;
+    std::size_t Index = 0;
+
+public:
+    Error
+    readRecord(
+        llvm::BitstreamCursor& Cursor,
+        unsigned AbbrevID,
+        unsigned& RecordID);
+
+    template<typename Integral = std::uint64_t>
+    requires std::integral<Integral>
+    Integral readInteger();
+
+    template<typename Integral>
+    requires std::integral<Integral>
+    void readInteger(Integral& result);
+
+    bool readBool();
+    void readBool(bool& result);
+
+    template<typename Enum>
+    requires std::is_enum_v<Enum>
+    Enum readEnum();
+
+    template<typename Enum>
+    requires std::is_enum_v<Enum>
+    void readEnum(Enum& result);
+
+    std::string readString();
+    void readString(std::string& result);
+
+    void readLocation(Location& result);
+};
+
 // Class to read bitstream into an InfoSet collection
 class BitcodeReader
 {
