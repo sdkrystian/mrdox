@@ -1,0 +1,144 @@
+[source,cpp,subs="verbatim,macros,-callouts"]
+----
+{{#if (eq kind "function")}}
+{{!--
+
+                functions
+
+--}}
+{{#if template}}{{>template-head template}}
+{{/if~}}
+{{#if isFriend}}friend
+{{/if~}}
+{{#if constexprKind}}{{constexprKind}}
+{{/if~}}
+{{#if storageClass}}{{storageClass}}
+{{/if~}}
+{{#if isVirtual}}virtual
+{{/if~}}
+
+{{#if (eq class "normal")~}}
+{{>declarator-before return}}
+
+{{#if (eq template.kind "explicit")~}}
+    {{#if template.primary.id~}}xref:{{template.primary.ref}}[{{name}}]{{else}}{{name}}{{/if~}}
+    {{~>template-args args=template.args~}}
+{{else~}}
+    {{name~}}
+{{/if~}}
+{{else if (ne class "conversion")~}}
+{{name~}}
+{{else~}}
+operator {{>declarator return~}}
+{{/if}}
+({{#each params}}{{#unless (and @first @last)}}
+    {{/unless}}{{>declarator type decl-name=name~}}
+    {{#if default}} = {{default}}{{/if~}}
+    {{#unless @last}},{{/unless~}}
+{{/each~}})
+{{~#if isConst}} const{{/if~}}
+{{#if isVolatile}} volatile{{/if~}}
+{{#if refQualifier}} {{refQualifier}}{{/if~}}
+{{#if (eq exceptionSpec "noexcept")}} noexcept{{/if~}}
+{{#if (eq class "normal")}}{{>declarator-after return}}{{/if~}}
+{{#if hasOverrideAttr}} override{{/if~}}
+{{#if isFinal}} final{{/if~}}
+{{#if isPure}} = 0{{/if~}}
+{{#if isDeleted}} = delete{{/if~}}
+{{#if isDefaulted}} = default{{/if~}}
+;
+{{else if (eq kind "record")}}
+{{!--
+
+                records
+
+--}}
+{{#if template}}{{>template-head template}}
+{{/if~}}
+{{#if (or (eq template.kind "explicit") (eq template.kind "partial"))~}}
+    {{#if isFriend}}friend {{/if~}}
+    {{tag}} {{#if template.primary.id~}}xref:{{template.primary.ref}}[{{name}}]{{else}}{{name}}{{/if~}}
+    {{~>template-args args=template.args~}}
+{{else~}}
+    {{#if isFriend}}friend {{/if~}}
+    {{tag}} {{name~}}
+{{/if~}}
+{{#unless bases}}
+;
+{{else if isFriend}}
+;
+{{else}}
+
+{{#each bases}}
+    {{#if @first}}:{{else}},{{/if}}
+    {{~#unless (eq access ../defaultAccess)}} {{access}}{{/unless}}
+    {{~#if isVirtual}} virtual{{/if}}
+    {{~null}} {{>declarator type}}
+    {{~#if @last}};{{/if}}
+{{/each}}
+{{/unless}}
+
+{{else if (eq kind "variable")}}
+{{!--
+
+                variables
+
+--}}
+{{#if template}}{{>template-head template}}
+{{/if~}}
+{{#if constexprKind}}{{constexprKind}}
+{{/if~}}
+{{#if storageClass}}{{storageClass}}
+{{/if~}}
+{{#if isThreadLocal}}thread_local
+{{/if~}}
+{{#if (or (eq template.kind "explicit") (eq template.kind "partial"))~}}
+    {{>declarator-before type}} {{#if template.primary.id~}}xref:{{template.primary.ref}}[{{name}}]{{else}}{{name}}{{/if~}}
+    {{~>template-args args=template.args~}}
+{{else~}}
+    {{>declarator-before type}} {{name~}}
+{{/if~}}
+{{>declarator-after type~}}
+;
+{{else if (eq kind "typedef")}}
+{{!--
+
+                typedefs
+
+--}}
+{{#if isUsing~}}
+    {{~#if template}}{{>template-head template}}
+    {{/if~}}
+    using {{name}} = {{>declarator type}}
+{{~else~}}
+    typedef {{>declarator type decl-name=name}}
+{{~/if}}
+;
+{{else if (eq kind "field")}}
+{{!--
+
+                fields
+
+--}}
+{{#if isMutable}}mutable
+{{/if~}}
+{{>declarator-before type}} {{name~}}
+{{#if isBitfield}} : {{bitfieldWidth}}{{/if~}}
+{{>declarator-after type~}}
+;
+{{else if (eq kind "enum")}}
+{{!--
+
+                enums
+
+--}}
+enum {{name}};
+{{else if (eq kind "enumerator")}}
+{{!--
+
+                enumerators
+
+--}}
+{{name}}{{#if initializer}} = {{initializer}}{{~/if}}
+{{/if}}
+----

@@ -12,4 +12,15 @@
 {{/each}}
 |===
 
+
+{{#each members}}
+{{doc.brief}}
+{{>signature . isFriend=false}}
+
+
+
+
+{{/each}}
+
+
 {{/with}}
