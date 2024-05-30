@@ -12,7 +12,10 @@
 {{/if~}}
 {{>declarator-id symbol link=symbol.template.primary}}
 ({{#if symbol.isExplicitObjectMemberFunction}}this {{/if}}{{#each symbol.params}}{{#unless (and @first @last)}}
-    {{/unless}}{{>declarator type decl-name=name~}}
+    {{/unless}}{{#if (contains (pluck ../symbol.doc.params "name") name)~}}
+    {{#if (get (at ../symbol.doc.params (find (pluck ../symbol.doc.params "name") name)) "seebelow")~}}pass:q[_see-below_] {{name~}}
+    {{else}}{{>declarator type decl-name=name~}}{{/if~}}
+    {{else}}{{>declarator type decl-name=name~}}{{/if~}}
     {{#if default}} = {{default}}{{/if~}}
     {{#unless @last}},{{/unless~}}
 {{/each~}}{{#if symbol.isVariadic}}{{#if symbol.params}}, {{/if}}...{{/if}})

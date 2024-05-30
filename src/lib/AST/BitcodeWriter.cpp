@@ -328,6 +328,7 @@ RecordIDNameMap = []()
         {JAVADOC_NODE_PART, {"JavadocNodePart", &Integer32Abbrev}},
         {JAVADOC_NODE_SYMBOLREF, {"JavadocNodeSymbol", &SymbolIDAbbrev}},
         {JAVADOC_PARAM_DIRECTION, {"JavadocParamDirection", &Integer32Abbrev}},
+        {JAVADOC_SEE_BELOW, {"JavadocSeeBelow", &BoolAbbrev}},
         {NAMESPACE_BITS, {"NamespaceBits", &Integer32ArrayAbbrev}},
         {NAME_INFO_KIND, {"NameKind", &Integer32Abbrev}},
         {NAME_INFO_ID, {"NameID", &SymbolIDAbbrev}},
@@ -423,7 +424,7 @@ RecordsByBlock{
     {BI_JAVADOC_NODE_BLOCK_ID,
         {JAVADOC_NODE_KIND, JAVADOC_NODE_HREF, JAVADOC_NODE_STRING,
         JAVADOC_NODE_STYLE, JAVADOC_NODE_ADMONISH, JAVADOC_PARAM_DIRECTION,
-        JAVADOC_NODE_PART, JAVADOC_NODE_SYMBOLREF}},
+        JAVADOC_NODE_PART, JAVADOC_NODE_SYMBOLREF, JAVADOC_SEE_BELOW}},
     // NamespaceInfo
     {BI_NAMESPACE_BLOCK_ID,
         {NAMESPACE_BITS}},
@@ -990,6 +991,8 @@ emitBlock(
             emitRecord(J.style, JAVADOC_NODE_STYLE);
         if constexpr(requires { J.admonish; })
             emitRecord(J.admonish, JAVADOC_NODE_ADMONISH);
+        if constexpr(requires { J.see_below; })
+            emitRecord(J.see_below, JAVADOC_SEE_BELOW);
         if constexpr(requires { J.direction; })
             emitRecord(J.direction, JAVADOC_PARAM_DIRECTION);
         if constexpr(requires { J.parts; })

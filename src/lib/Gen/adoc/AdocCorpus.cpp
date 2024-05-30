@@ -331,7 +331,8 @@ domCreate(
     const AdocCorpus& corpus)
 {
     dom::Object::storage_type entries = {
-        { "name", I.name }
+        { "name", I.name },
+        { "seebelow", I.see_below }
     };
     std::string s;
     DocVisitor visitor(corpus, s);
@@ -349,7 +350,8 @@ domCreate(
     const AdocCorpus& corpus)
 {
     dom::Object::storage_type entries = {
-        { "name", I.name }
+        { "name", I.name },
+        { "seebelow", I.see_below }
     };
     std::string s;
     DocVisitor visitor(corpus, s);

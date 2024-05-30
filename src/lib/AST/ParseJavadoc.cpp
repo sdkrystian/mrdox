@@ -111,6 +111,7 @@ class JavadocVisitor
 {
     Config const& config_;
     ASTContext const& ctx_;
+    CommandTraits& traits_;
     SourceManager const& sm_;
     FullComment const* FC_;
     Javadoc jd_;
@@ -425,6 +426,7 @@ JavadocVisitor(
     Diagnostics& diags)
     : config_(config)
     , ctx_(D->getASTContext())
+    , traits_(ctx_.getCommentCommandTraits())
     , sm_(ctx_.getSourceManager())
     , FC_(FC)
     , diags_(diags)
@@ -754,9 +756,8 @@ JavadocVisitor::
 visitInlineCommandComment(
     InlineCommandComment const* C)
 {
-    auto const* cmd = ctx_
-        .getCommentCommandTraits()
-        .getCommandInfo(C->getCommandID());
+    auto const* cmd =
+        traits_.getCommandInfo(C->getCommandID());
 
     // VFALCO I'd like to know when this happens
     MRDOCS_ASSERT(cmd != nullptr);
@@ -911,9 +912,8 @@ JavadocVisitor::
 visitBlockCommandComment(
     BlockCommandComment const* C)
 {
-    auto const* cmd = ctx_
-        .getCommentCommandTraits()
-        .getCommandInfo(C->getCommandID());
+    auto const* cmd =
+        traits_.getCommandInfo(C->getCommandID());
     if(cmd == nullptr)
     {
         // ignore this command and the
@@ -1243,6 +1243,22 @@ visitBlockCommandComment(
         MRDOCS_UNREACHABLE();
 
     default:
+        if(C->getCommandName(traits_) == "seebelow")
+        {
+            // KRYSTIAN FIXME: don't silently ignore errors
+            auto& blocks = jd_.getBlocks();
+            if(blocks.empty())
+                break;
+            doc::visit(*blocks.back(), [](auto& t)
+            {
+                if constexpr(requires { t.see_below; })
+                    t.see_below = true;
+            });
+            // reenter the scope of the last block
+            auto scope = enterScope(*blocks.back());
+            visitChildren(C->getParagraph());
+            break;
+        }
         MRDOCS_UNREACHABLE();
     }
 }
@@ -1354,6 +1370,7 @@ goodArgCount(std::size_t n,
 void
 initCustomCommentCommands(ASTContext& context)
 {
+    #if 0
     auto& traits = context.getCommentCommandTraits();
 
     {
@@ -1366,6 +1383,7 @@ initCustomCommentCommands(ASTContext& context)
     }
 
     (void)traits;
+    #endif
 }
 
 void

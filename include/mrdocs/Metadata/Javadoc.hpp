@@ -613,6 +613,7 @@ struct Param : Paragraph
 {
     String name;
     ParamDirection direction;
+    bool see_below = false;
 
     static constexpr Kind static_kind = Kind::param;
 
@@ -644,6 +645,7 @@ struct Param : Paragraph
 struct Returns : Paragraph
 {
     static constexpr Kind static_kind = Kind::returns;
+    bool see_below = false;
 
     Returns()
         : Paragraph(Kind::returns)
@@ -665,6 +667,7 @@ struct Returns : Paragraph
 struct TParam : Paragraph
 {
     String name;
+    bool see_below = false;
 
     static constexpr Kind static_kind = Kind::tparam;
 

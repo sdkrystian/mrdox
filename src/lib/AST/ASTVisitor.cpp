@@ -23,6 +23,7 @@
 #include <mrdocs/Metadata.hpp>
 #include <clang/AST/AST.h>
 #include <clang/AST/Attr.h>
+#include <clang/AST/CommentVisitor.h>
 #include <clang/AST/DeclVisitor.h>
 #include <clang/AST/TypeVisitor.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -100,6 +101,51 @@ struct SymbolFilter
             filter_.detached = detached_prev_;
         }
     };
+};
+
+struct SpecialCommandVisitor
+        : comments::ConstCommentVisitor<SpecialCommandVisitor>
+{
+    comments::CommandTraits& traits;
+
+    bool detail = false;
+    bool exclude = false;
+
+    SpecialCommandVisitor(
+        const comments::Comment* comment,
+        comments::CommandTraits& traits)
+        : traits(traits)
+    {
+        visit(comment);
+    }
+
+    void
+    visitChildren(
+        const comments::Comment* C)
+    {
+        auto children = std::ranges::subrange(
+            C->child_begin(), C->child_end());
+        for(const auto* child : children)
+            visit(child);
+    }
+
+    void
+    visitBlockCommandComment(
+        const comments::BlockCommandComment* C)
+    {
+        if(C->getCommandName(traits) == "detail")
+            detail = true;
+        if(C->getCommandName(traits) == "exclude")
+            exclude = true;
+        visitChildren(C);
+    }
+
+    void
+    visitComment(
+        const comments::Comment* C)
+    {
+        visitChildren(C);
+    }
 };
 
 //------------------------------------------------
@@ -779,6 +825,109 @@ public:
         return &it->second;
     }
 
+    bool isSFINAETemplate(TemplateDecl* TD, const IdentifierInfo* MemberName)
+    {
+        if(! TD)
+            return false;
+
+        if(auto* TATD = dyn_cast<TypeAliasTemplateDecl>(TD))
+        {
+            auto Underlying = TATD->getTemplatedDecl()->
+                getUnderlyingType().getCanonicalType();
+            // type alias for non-dependent type, e.g. void_t
+            if(! Underlying->isDependentType())
+                return true;
+            return isSFINAEType(Underlying, MemberName);
+        }
+
+        auto* CTD = dyn_cast<ClassTemplateDecl>(TD);
+        if(! CTD)
+            return false;
+
+        QualType MemberType;
+        auto IsMismatch = [&](CXXRecordDecl* RD)
+        {
+            auto MemberLookup = RD->lookup(MemberName);
+            if(! MemberLookup.isSingleResult())
+                return ! MemberLookup.empty();
+            auto* TND = dyn_cast<TypedefNameDecl>(MemberLookup.front());
+            // the specialization has a member with the right name,
+            // but it isn't an alias declaration/typedef declaration...
+            if(! TND)
+                return true;
+            auto CurrentType = TND->getUnderlyingType();
+            if(MemberType.isNull())
+            {
+                MemberType = CurrentType;
+                return false;
+            }
+            return ! context_.hasSameType(MemberType, CurrentType);
+        };
+
+        if (IsMismatch(CTD->getTemplatedDecl()))
+            return false;
+
+        for(auto* CTSD : CTD->specializations())
+        {
+            if(CTSD->isExplicitSpecialization() && IsMismatch(CTSD))
+                return false;
+        }
+
+        SmallVector<ClassTemplatePartialSpecializationDecl*> PartialSpecs;
+        CTD->getPartialSpecializations(PartialSpecs);
+
+        for(auto* CTPSD : PartialSpecs)
+        {
+            if(IsMismatch(CTPSD))
+                return false;
+        }
+
+        return true;
+    }
+
+    bool isSFINAEType(QualType T, const IdentifierInfo* MemberName = nullptr)
+    {
+        if(auto* ET = T->getAs<ElaboratedType>())
+            T = ET->getNamedType();
+
+        if(auto* DNT = T->getAsAdjusted<DependentNameType>())
+        {
+            auto* TST = DNT->getQualifier()->
+                getAsType()->getAsAdjusted<TemplateSpecializationType>();
+            if(! TST)
+                return false;
+            return isSFINAETemplate(
+                TST->getTemplateName().getAsTemplateDecl(),
+                DNT->getIdentifier());
+        }
+
+        if(auto* TST = T->getAsAdjusted<TemplateSpecializationType>())
+        {
+            return isSFINAETemplate(
+                TST->getTemplateName().getAsTemplateDecl(),
+                nullptr);
+        }
+
+        //if(!T->isDependentType())
+        //    return true;
+        #if 0
+        if(! EnclosingTST)
+        {
+            auto* DNT = T->getAsAdjusted<DependentNameType>();
+            if(! DNT || MemberName)
+                return false;
+            MemberName = DNT->getIdentifier();
+        }
+
+        auto* EnclosingTD =
+            EnclosingTST->getTemplateName().
+            getAsTemplateDecl();
+        if(! EnclosingTD)
+            return false;
+            #endif
+        return false;
+    }
+
     /** Add a source location to an Info object.
 
         This function will add a source location to an Info,
@@ -1441,6 +1590,18 @@ public:
             }
         }
 
+        if(RawComment* RC =
+            D->getASTContext().getRawCommentForDeclNoCache(D))
+        {
+            comments::FullComment* FC =
+                RC->parse(D->getASTContext(), &sema_.getPreprocessor(), D);
+            SpecialCommandVisitor visitor(FC, context_.getCommentCommandTraits());
+            if(visitor.exclude)
+                return false;
+        }
+
+
+
     #if 0
         bool extract = inExtractedFile(D);
         // if we're extracting a declaration as a dependency,
@@ -1875,6 +2036,17 @@ public:
     #endif
 
         getParentNamespaces(I, D);
+
+
+
+        QualType Underlying = D->getUnderlyingType();
+
+        llvm::outs() << "type: ";
+        Underlying.print(llvm::outs(), context_.getPrintingPolicy());
+        llvm::outs() << '\n';
+
+        llvm::outs() << "    SFINAE type = " << (isSFINAEType(Underlying) ? "yes" : "no") << '\n';
+
     }
 
     //------------------------------------------------
@@ -4095,9 +4267,7 @@ struct ASTAction
     {
         CompilerInstance& CI = getCompilerInstance();
         if (!CI.hasPreprocessor())
-        {
             return;
-        }
 
         // Ensure comments in system headers are retained.
         // We may want them if, e.g., a declaration was extracted
@@ -4105,9 +4275,13 @@ struct ASTAction
         CI.getLangOpts().RetainCommentsFromSystemHeaders = true;
 
         if (!CI.hasSema())
-        {
             CI.createSema(getTranslationUnitKind(), nullptr);
-        }
+
+        comments::CommandTraits& CT = CI.getASTContext().getCommentCommandTraits();
+
+        CT.registerBlockCommand("exclude");
+        CT.registerBlockCommand("detail");
+        CT.registerBlockCommand("seebelow");
 
         ParseAST(
             CI.getSema(),

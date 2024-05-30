@@ -360,6 +360,22 @@ public:
             }
         }
 
+        case JAVADOC_SEE_BELOW:
+        {
+            bool see_below = false;
+            if(auto err = decodeRecord(R, see_below, Blob))
+                return err;
+            return doc::visit(*nodes.back().get(), [&](auto& t)
+            {
+                if constexpr(requires { t.see_below; })
+                {
+                    t.see_below = see_below;
+                    return Error::success();
+                }
+                return formatError("seebelow on wrong kind");
+            });
+        }
+
         case JAVADOC_NODE_KIND:
         {
             doc::Kind kind{};
