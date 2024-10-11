@@ -127,6 +127,7 @@ enum class Kind
     throws,
     details,
     see,
+    related,
     precondition,
     postcondition
 };
@@ -362,6 +363,25 @@ struct Copied : Reference
     {
         return kind == other.kind &&
             *this == static_cast<const Copied&>(other);
+    }
+};
+
+/** A reference to a related symbol.
+*/
+struct Related : Reference
+{
+    static constexpr Kind static_kind = Kind::related;
+
+    Related(String string_ = String()) noexcept
+        : Reference(std::move(string_), Kind::related)
+    {
+    }
+
+    bool operator==(Related const&) const noexcept = default;
+    bool equals(Node const& other) const noexcept override
+    {
+        return kind == other.kind &&
+            *this == static_cast<const Related&>(other);
     }
 };
 
@@ -841,6 +861,8 @@ visit(
         return f.template operator()<Precondition>(std::forward<Args>(args)...);
     case Kind::postcondition:
         return f.template operator()<Postcondition>(std::forward<Args>(args)...);
+    case Kind::related:
+        return f.template operator()<Related>(std::forward<Args>(args)...);
     default:
         return f.template operator()<void>(std::forward<Args>(args)...);
     }
@@ -908,6 +930,8 @@ visit(
         return visitor.template visit<Precondition>();
     case Kind::postcondition:
         return visitor.template visit<Postcondition>();
+    case Kind::related:
+        return visitor.template visit<Related>();
     default:
         MRDOCS_UNREACHABLE();
     }
@@ -942,6 +966,7 @@ struct Overview
     std::vector<See const*> sees;
     std::vector<Precondition const*> preconditions;
     std::vector<Postcondition const*> postconditions;
+    std::vector<Related const*> related;
 };
 
 MRDOCS_DECL dom::String toString(Style style) noexcept;
