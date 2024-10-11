@@ -101,6 +101,14 @@ domCreate(
 
 dom::Value
 domCreate(
+    const doc::Related& I,
+    const HandlebarsCorpus& corpus)
+{
+    return corpus.toStringFn(corpus, I);
+}
+
+dom::Value
+domCreate(
     const doc::Precondition& I,
     const HandlebarsCorpus& corpus)
 {
@@ -256,6 +264,7 @@ getJavadoc(Javadoc const& jd) const
     emplaceObjectArray("see", ov.sees);
     emplaceObjectArray("preconditions", ov.preconditions);
     emplaceObjectArray("postconditions", ov.postconditions);
+    emplaceObjectArray("related", ov.related);
     return dom::Object(std::move(objKeyValues));
 }
 
