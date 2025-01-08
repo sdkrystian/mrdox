@@ -810,64 +810,6 @@ struct Postcondition : Paragraph
 
 //------------------------------------------------
 
-/** A visitor for node types.
- */
-template<class F, class... Args>
-constexpr
-auto
-visit(
-    Kind kind,
-    F&& f, Args&&... args)
-{
-    switch(kind)
-    {
-    case Kind::admonition:
-        return f.template operator()<Admonition>(std::forward<Args>(args)...);
-    case Kind::brief:
-        return f.template operator()<Brief>(std::forward<Args>(args)...);
-    case Kind::code:
-        return f.template operator()<Code>(std::forward<Args>(args)...);
-    case Kind::heading:
-        return f.template operator()<Heading>(std::forward<Args>(args)...);
-    case Kind::link:
-        return f.template operator()<Link>(std::forward<Args>(args)...);
-    case Kind::reference:
-        return f.template operator()<Reference>(std::forward<Args>(args)...);
-    case Kind::copied:
-        return f.template operator()<Copied>(std::forward<Args>(args)...);
-    case Kind::list_item:
-        return f.template operator()<ListItem>(std::forward<Args>(args)...);
-    case Kind::unordered_list:
-        return f.template operator()<UnorderedList>(std::forward<Args>(args)...);
-    case Kind::paragraph:
-        return f.template operator()<Paragraph>(std::forward<Args>(args)...);
-    case Kind::param:
-        return f.template operator()<Param>(std::forward<Args>(args)...);
-    case Kind::returns:
-        return f.template operator()<Returns>(std::forward<Args>(args)...);
-    case Kind::styled:
-        return f.template operator()<Styled>(std::forward<Args>(args)...);
-    case Kind::text:
-        return f.template operator()<Text>(std::forward<Args>(args)...);
-    case Kind::tparam:
-        return f.template operator()<TParam>(std::forward<Args>(args)...);
-    case Kind::throws:
-        return f.template operator()<Throws>(std::forward<Args>(args)...);
-    case Kind::details:
-        return f.template operator()<Details>(std::forward<Args>(args)...);
-    case Kind::see:
-        return f.template operator()<See>(std::forward<Args>(args)...);
-    case Kind::precondition:
-        return f.template operator()<Precondition>(std::forward<Args>(args)...);
-    case Kind::postcondition:
-        return f.template operator()<Postcondition>(std::forward<Args>(args)...);
-    case Kind::related:
-        return f.template operator()<Related>(std::forward<Args>(args)...);
-    default:
-        return f.template operator()<void>(std::forward<Args>(args)...);
-    }
-}
-
 /** Visit a node.
 
     @param node The node to visit.
